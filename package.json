@@ -1,0 +1,17 @@
+{
+  "name": "lan-ludo-game",
+  "version": "1.0.0",
+  "description": "LAN Connected Multiplayer Ludo Game with Spectators and Bots",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/engine.test.js"
+  },
+  "keywords": ["ludo", "multiplayer", "lan", "socketio", "game"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

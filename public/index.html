@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>LAN Ludo Multiplayer - Real-Time Board Game</title>
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/style.css" />
+  
+  <!-- Canvas Confetti for Victory Celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+
+  <!-- Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+  <div id="app" class="app-container">
+    
+    <!-- Top Header -->
+    <header class="main-header">
+      <div class="brand">
+        <span class="logo-icon">🎲</span>
+        <h1 class="logo-text">LAN LUDO <span class="badge-tag">ULTIMATE</span></h1>
+      </div>
+
+      <div class="network-badge" id="lanBadge" title="Click to copy LAN URL">
+        <span class="pulse-dot"></span>
+        <span class="lan-label">LAN IP:</span>
+        <span class="lan-url" id="lanUrlText">Detecting...</span>
+        <button class="btn-copy" id="btnCopyLan">📋 Copy</button>
+      </div>
+
+      <div class="header-controls">
+        <button id="btnSoundToggle" class="btn-icon" title="Toggle Sound">🔊</button>
+        <div class="spectator-counter" id="spectatorBadge" style="display: none;">
+          👁️ <span id="spectatorCount">0</span> Spectators
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <main class="main-content">
+      
+      <!-- LOBBY / ROOM SELECTION VIEW -->
+      <section id="lobbyView" class="view-panel active">
+        <div class="lobby-card glassmorphism">
+          <div class="lobby-header">
+            <h2>Welcome to LAN Ludo</h2>
+            <p>Play locally with friends on your Wi-Fi/LAN, add AI bots, or watch as a spectator!</p>
+          </div>
+
+          <div class="lobby-actions">
+            <!-- Create Room Box -->
+            <div class="action-box">
+              <h3>🎮 Host a Game</h3>
+              <div class="form-group">
+                <label for="hostPlayerName">Your Name:</label>
+                <input type="text" id="hostPlayerName" placeholder="Player 1" value="Player 1" />
+              </div>
+              <div class="form-group">
+                <label>Select Color:</label>
+                <div class="color-selector" id="hostColorSelector">
+                  <button type="button" class="color-opt red selected" data-color="red"></button>
+                  <button type="button" class="color-opt green" data-color="green"></button>
+                  <button type="button" class="color-opt yellow" data-color="yellow"></button>
+                  <button type="button" class="color-opt blue" data-color="blue"></button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="hostBotCount">🤖 AI Bots to Add:</label>
+                <select id="hostBotCount" class="form-select">
+                  <option value="3" selected>3 Bots (Full 4-Player Match)</option>
+                  <option value="2">2 Bots</option>
+                  <option value="1">1 Bot</option>
+                  <option value="0">0 Bots (Humans Only)</option>
+                </select>
+              </div>
+              <button id="btnCreateRoom" class="btn btn-primary glow-button">
+                🚀 Create Room & Host
+              </button>
+            </div>
+
+            <!-- Join Room Box -->
+            <div class="action-box">
+              <h3>🔑 Join Existing Room</h3>
+              <div class="form-group">
+                <label for="joinPlayerName">Your Name:</label>
+                <input type="text" id="joinPlayerName" placeholder="Guest" value="Guest" />
+              </div>
+              <div class="form-group">
+                <label for="joinRoomId">Room Code:</label>
+                <input type="text" id="joinRoomId" placeholder="e.g. ABCD" maxlength="4" style="text-transform: uppercase;" />
+              </div>
+
+              <!-- Available Colors for Join -->
+              <div class="form-group" id="joinColorGroup" style="display: none;">
+                <label>🎨 Choose Available Color:</label>
+                <div class="color-selector" id="joinColorSelector">
+                  <!-- Dynamically populated with available room colors -->
+                </div>
+              </div>
+
+              <div class="join-btn-group">
+                <button id="btnJoinPlayer" class="btn btn-success">
+                  ⚔️ Join as Player
+                </button>
+                <button id="btnJoinSpectator" class="btn btn-secondary">
+                  👁️ Watch as Spectator
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Rooms List -->
+          <div class="active-rooms-container">
+            <h4>📡 Available LAN Rooms</h4>
+            <div id="roomsList" class="rooms-grid">
+              <div class="empty-rooms">No active rooms found. Create one above!</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GAME PLAY VIEW -->
+      <section id="gameView" class="view-panel">
+        
+        <div class="game-layout">
+          
+          <!-- LEFT SIDE: ROOM INFO & CONTROLS -->
+          <div class="left-controls-column">
+            
+            <!-- Room Info Bar -->
+            <div class="room-info-bar glassmorphism">
+              <div class="room-code-tag">
+                ROOM: <strong id="currentRoomCode">----</strong>
+              </div>
+              <div class="turn-status-tag" id="turnStatusText">
+                Waiting for host to start...
+              </div>
+              <div class="host-controls-group">
+                <button id="btnStartGame" class="btn btn-warning host-only-btn glow-button" style="display: none;">
+                  ⚡ Start Game
+                </button>
+                <button id="btnDeleteRoom" class="btn btn-danger host-only-btn" style="display: none;">
+                  🗑️ Delete Room
+                </button>
+              </div>
+            </div>
+
+            <!-- ACTION CONTROLS / DICE BAR -->
+            <div class="controls-bar glassmorphism">
+              <div class="player-turn-indicator" id="turnIndicator">
+                <span class="indicator-color-dot" id="turnColorDot"></span>
+                <span id="turnPlayerName">Red's Turn</span>
+              </div>
+
+              <!-- Interactive 3D/Animated Dice -->
+              <div class="dice-container" id="diceContainer">
+                <div class="dice-cube" id="diceCube">
+                  <div class="face face-1"><span></span></div>
+                  <div class="face face-2"><span></span><span></span></div>
+                  <div class="face face-3"><span></span><span></span><span></span></div>
+                  <div class="face face-4"><span></span><span></span><span></span><span></span></div>
+                  <div class="face face-5"><span></span><span></span><span></span><span></span><span></span></div>
+                  <div class="face face-6"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                </div>
+                <button id="btnRollDice" class="btn btn-primary roll-btn" disabled>
+                  🎲 ROLL DICE
+                </button>
+              </div>
+
+              <div class="move-prompt" id="movePrompt">
+                Roll the dice to start your turn!
+              </div>
+            </div>
+
+          </div>
+
+          <!-- CENTER: LUDO BOARD -->
+          <div class="board-column">
+            <!-- LUDO BOARD CONTAINER -->
+            <div class="board-wrapper">
+              <div id="ludoBoard" class="ludo-board">
+                <!-- SVG / CSS Grid dynamic board will render here -->
+              </div>
+              <div id="tokensLayer" class="tokens-layer"></div>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDEBAR: PLAYERS, SPECTATORS, CHAT & EMOTES -->
+          <aside class="sidebar-column glassmorphism">
+            
+            <!-- Player Cards -->
+            <div class="sidebar-section">
+              <div class="section-header">
+                <h3>👥 Players (Up to 4)</h3>
+              </div>
+              <div class="players-cards-grid" id="playersCardsGrid">
+                <!-- Player cards dynamically rendered here -->
+              </div>
+            </div>
+
+            <!-- Quick Emote Reactions Bar (2 Lines Grid) -->
+            <div class="emote-bar">
+              <div class="emote-header">
+                <span class="emote-label">Reactions:</span>
+                <button type="button" class="btn-more-emotes" id="btnMoreEmotes" onclick="toggleStickerDrawer(true)">➕ More</button>
+              </div>
+              <div class="emote-buttons-grid">
+                <button class="btn-emote" data-emote="👍">👍</button>
+                <button class="btn-emote" data-emote="🎲">🎲</button>
+                <button class="btn-emote" data-emote="😂">😂</button>
+                <button class="btn-emote" data-emote="😭">😭</button>
+                <button class="btn-emote" data-emote="🚀">🚀</button>
+                <button class="btn-emote" data-emote="👑">👑</button>
+                <button class="btn-emote" data-emote="🤡">🤡</button>
+                <button class="btn-emote" data-emote="💀">💀</button>
+                <button class="btn-emote" data-emote="🤬">🤬</button>
+                <button class="btn-emote" data-emote="🍀">🍀</button>
+              </div>
+            </div>
+
+            <!-- Real-Time Chat Section -->
+            <div class="sidebar-section chat-section">
+              <div class="section-header">
+                <h3>💬 Live LAN Chat</h3>
+              </div>
+              <div class="chat-messages-box" id="chatMessages">
+                <div class="chat-system-msg">System: Welcome to LAN Ludo chat!</div>
+              </div>
+              <form id="chatForm" class="chat-input-form">
+                <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off" />
+                <button type="submit" class="btn btn-primary">Send</button>
+              </form>
+            </div>
+
+          </aside>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Emote Floating Layer for Popups -->
+    <div id="emoteOverlay" class="emote-overlay"></div>
+
+    <!-- FUNNY STICKERS & EMOTICONS DRAWER MODAL -->
+    <div id="stickerDrawerModal" class="sticker-drawer-overlay" style="display: none;">
+      <div class="sticker-drawer-card glassmorphism">
+        <div class="sticker-drawer-header">
+          <h3>🎭 Funny Stickers & Emoticons</h3>
+          <button class="btn-close-drawer" onclick="toggleStickerDrawer(false)">✕</button>
+        </div>
+        
+        <div class="sticker-category-tabs">
+          <button class="tab-btn active" onclick="switchStickerTab('funny')">🤡 Pranks</button>
+          <button class="tab-btn" onclick="switchStickerTab('laugh')">😂 Laugh</button>
+          <button class="tab-btn" onclick="switchStickerTab('rage')">🤬 Taunts</button>
+          <button class="tab-btn" onclick="switchStickerTab('luck')">🍀 Luck</button>
+        </div>
+
+        <div class="sticker-grid" id="stickerGrid">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <!-- VICTORY CELEBRATION MODAL -->
+    <div id="victoryModal" class="victory-modal-overlay" style="display: none;">
+      <div class="victory-card glassmorphism">
+        <div class="trophy-icon">🏆</div>
+        <h1 class="victory-title" id="victoryTitle">VICTORY!</h1>
+        <p class="victory-subtitle" id="victorySubtitle">Player Red has won the game!</p>
+        <div class="victory-rank-badge" id="victoryRankBadge">1st PLACE CHAMPION</div>
+        <button class="btn btn-primary glow-button" onclick="closeVictoryModal()">
+          🎮 Continue Game
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/audio.js"></script>
+  <script src="js/game-render.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
