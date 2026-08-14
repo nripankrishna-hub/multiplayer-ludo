@@ -364,6 +364,19 @@ class BoardRenderer {
     const { tokens, movableTokens, currentTurnColor, hasRolled } = gameState;
     const cellOccupancy = new Map();
 
+    // Check if any element is currently executing a step-hop or capture hit CSS animation
+    let anyHopping = false;
+    this.tokenElements.forEach(el => {
+      if (el.classList.contains('step-hop') || el.classList.contains('captured-hit')) {
+        anyHopping = true;
+      }
+    });
+
+    if (!anyHopping) {
+      this.animatingTokenKey = null;
+      this.animatingCapturedDefenderKey = null;
+    }
+
     for (const color of ['red', 'green', 'yellow', 'blue']) {
       const colorTokens = tokens[color];
       const playerAssigned = gameState.players && gameState.players[color] !== null;
@@ -382,8 +395,10 @@ class BoardRenderer {
           tokenEl.style.display = 'flex';
         }
 
-        // Skip position override for token currently mid-animation OR defender waiting for attacker to arrive!
-        if (this.animatingTokenKey !== tokenKey && this.animatingCapturedDefenderKey !== tokenKey) {
+        const isSelfHopping = tokenEl.classList.contains('step-hop') || tokenEl.classList.contains('captured-hit');
+
+        // Only skip position update if THIS specific token is currently mid-hop animation
+        if (!isSelfHopping) {
           const coord = this.getGridCoordinates(color, t.step, t.id);
           const cellKey = `${coord.r.toFixed(1)}-${coord.c.toFixed(1)}`;
           const count = cellOccupancy.get(cellKey) || 0;
@@ -392,17 +407,10 @@ class BoardRenderer {
           this.positionToken(tokenKey, color, t.step, t.id, count);
         }
 
-        // Check if token element is actively executing a step-hop or capture hit CSS animation
-        const isActivelyAnimating = tokenEl.classList.contains('step-hop') || tokenEl.classList.contains('captured-hit') || tokenEl.classList.contains('goal-reach');
-        
-        if (!isActivelyAnimating && this.animatingTokenKey === tokenKey) {
-          this.animatingTokenKey = null;
-        }
-
-        // Movable highlight (ONLY when hasRolled is true AND not mid-animation)
+        // Movable highlight
         const isTurnColor = currentTurnColor === color;
         const isMovableToken = Array.isArray(movableTokens) && movableTokens.some(id => Number(id) === Number(t.id));
-        const isMovable = !isActivelyAnimating && hasRolled && isTurnColor && isMovableToken;
+        const isMovable = !isSelfHopping && hasRolled && isTurnColor && isMovableToken;
         const isMyTurn = currentTurnColor === myColor;
 
         if (isMovable) {
