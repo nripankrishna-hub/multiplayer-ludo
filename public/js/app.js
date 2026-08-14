@@ -399,6 +399,18 @@ function showGameView() {
 
 // Receive Game State Update
 socket.on('game-state', (state) => {
+  if (boardRenderer && boardRenderer.animatingTokenKey && currentGameState && currentGameState.tokens) {
+    // Preserve animating token step in incoming state payload to prevent premature jump to newStep
+    const [animColor, animIdStr] = boardRenderer.animatingTokenKey.split('-');
+    const animId = Number(animIdStr);
+    if (state.tokens && state.tokens[animColor]) {
+      const curToken = currentGameState.tokens[animColor]?.find(t => Number(t.id) === animId);
+      const newToken = state.tokens[animColor]?.find(t => Number(t.id) === animId);
+      if (curToken && newToken) {
+        newToken.step = curToken.step;
+      }
+    }
+  }
   currentGameState = state;
   updateGameUI(state);
 });
@@ -450,6 +462,11 @@ socket.on('token-moved', (res) => {
         const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
         showVictoryCelebration(winnerName, winnerColor, '1st');
       }
+
+      // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
+      if (currentGameState) {
+        updateGameUI(currentGameState);
+      }
     });
   }
 });
@@ -476,6 +493,11 @@ socket.on('bot-action', (action) => {
           const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
           const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
           showVictoryCelebration(winnerName, winnerColor, '1st');
+        }
+
+        // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
+        if (currentGameState) {
+          updateGameUI(currentGameState);
         }
       });
     }
@@ -579,6 +601,9 @@ function updateGameUI(state) {
   // Update Player Cards in Sidebar
   renderPlayerCards(players, currentTurnColor, isHost && status === 'WAITING', status);
 
+  // Orient Board for Player (Starting base & movement at Bottom-Left!)
+  boardRenderer.setBoardOrientation(myColor);
+
   // Render Board Tokens
   boardRenderer.renderTokens(state, myColor, (tokenId) => {
     // On Token Click
@@ -587,9 +612,10 @@ function updateGameUI(state) {
     }
   });
 
-  // Roll Dice Button State
+  // Roll Dice Button State (Disabled while token is mid-movement animation)
+  const isAnimating = boardRenderer && (boardRenderer.animatingTokenKey !== null || boardRenderer.animatingCapturedDefenderKey !== null);
   const isMyTurn = myRole === 'player' && currentTurnColor === myColor && status === 'PLAYING' && turnPlayer && turnPlayer.isConnected !== false;
-  btnRollDice.disabled = !isMyTurn || hasRolled;
+  btnRollDice.disabled = !isMyTurn || hasRolled || isAnimating;
 
   if (lastDiceValue) {
     setDiceFace(lastDiceValue);

@@ -148,6 +148,26 @@ class BoardRenderer {
     this.initTokensLayer();
   }
 
+  // Orient board so the current player's starting base & path are ALWAYS at Bottom-Left!
+  setBoardOrientation(playerColor) {
+    const boardWrapper = document.querySelector('.board-wrapper');
+    if (!boardWrapper) return;
+
+    const rotationAngles = {
+      red: 0,
+      green: 90,
+      yellow: 180,
+      blue: 270
+    };
+
+    const angle = rotationAngles[playerColor] || 0;
+    const unrotate = -angle;
+
+    boardWrapper.style.setProperty('--board-rotation', `${angle}deg`);
+    boardWrapper.style.setProperty('--pawn-unrotate', `${unrotate}deg`);
+    boardWrapper.style.transform = `rotate(${angle}deg)`;
+  }
+
   // Create 15x15 Board Grid matching Image 1
   initBoardGrid() {
     this.container.innerHTML = '';
@@ -338,13 +358,15 @@ class BoardRenderer {
       stackOffsetY = off.y;
     }
 
-    const leftPct = `${((coord.c / 15) * 100 + stackOffsetX).toFixed(3)}%`;
-    const topPct = `${((coord.r / 15) * 100 + stackOffsetY).toFixed(3)}%`;
+    const leftPct = `${((coord.c / 15) * 100 + stackOffsetX).toFixed(2)}%`;
+    const topPct = `${((coord.r / 15) * 100 + stackOffsetY).toFixed(2)}%`;
 
-    if (tokenEl.style.left !== leftPct) {
+    if (tokenEl.dataset.leftPct !== leftPct) {
+      tokenEl.dataset.leftPct = leftPct;
       tokenEl.style.left = leftPct;
     }
-    if (tokenEl.style.top !== topPct) {
+    if (tokenEl.dataset.topPct !== topPct) {
+      tokenEl.dataset.topPct = topPct;
       tokenEl.style.top = topPct;
     }
   }
@@ -352,7 +374,7 @@ class BoardRenderer {
   // Clear highlights immediately when a move starts
   clearMovableHighlights() {
     this.tokenElements.forEach(tokenEl => {
-      tokenEl.classList.remove('movable');
+      tokenEl.classList.remove('movable', 'step-hop', 'captured-hit', 'goal-reach');
       tokenEl.onclick = null;
     });
   }
@@ -363,19 +385,6 @@ class BoardRenderer {
 
     const { tokens, movableTokens, currentTurnColor, hasRolled } = gameState;
     const cellOccupancy = new Map();
-
-    // Check if any element is currently executing a step-hop or capture hit CSS animation
-    let anyHopping = false;
-    this.tokenElements.forEach(el => {
-      if (el.classList.contains('step-hop') || el.classList.contains('captured-hit')) {
-        anyHopping = true;
-      }
-    });
-
-    if (!anyHopping) {
-      this.animatingTokenKey = null;
-      this.animatingCapturedDefenderKey = null;
-    }
 
     for (const color of ['red', 'green', 'yellow', 'blue']) {
       const colorTokens = tokens[color];
@@ -395,10 +404,12 @@ class BoardRenderer {
           tokenEl.style.display = 'flex';
         }
 
-        const isSelfHopping = tokenEl.classList.contains('step-hop') || tokenEl.classList.contains('captured-hit');
+        const isSelfAnimating = this.animatingTokenKey === tokenKey || this.animatingCapturedDefenderKey === tokenKey;
 
-        // Only skip position update if THIS specific token is currently mid-hop animation
-        if (!isSelfHopping) {
+        // Forcefully strip stale animation classes if token is not actively mid-animation
+        if (!isSelfAnimating) {
+          tokenEl.classList.remove('step-hop', 'captured-hit', 'goal-reach');
+
           const coord = this.getGridCoordinates(color, t.step, t.id);
           const cellKey = `${coord.r.toFixed(1)}-${coord.c.toFixed(1)}`;
           const count = cellOccupancy.get(cellKey) || 0;
@@ -410,7 +421,7 @@ class BoardRenderer {
         // Movable highlight
         const isTurnColor = currentTurnColor === color;
         const isMovableToken = Array.isArray(movableTokens) && movableTokens.some(id => Number(id) === Number(t.id));
-        const isMovable = !isSelfHopping && hasRolled && isTurnColor && isMovableToken;
+        const isMovable = !isSelfAnimating && hasRolled && isTurnColor && isMovableToken;
         const isMyTurn = currentTurnColor === myColor;
 
         if (isMovable) {
@@ -471,7 +482,9 @@ class BoardRenderer {
 
     this.animatingTokenKey = tokenKey;
 
-    // Position token initially at oldStep to prevent premature jump glitch
+    // Reset dataset position cache so positionToken forces DOM placement at oldStep without jumping
+    delete tokenEl.dataset.leftPct;
+    delete tokenEl.dataset.topPct;
     this.positionToken(tokenKey, color, oldStep, tokenId);
 
     // Step 1: Open from Base (-1 to 0)
