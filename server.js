@@ -105,22 +105,34 @@ io.on('connection', (socket) => {
     lanUrl: `http://${LAN_IP}:${currentPort}`
   });
 
-  // Get active rooms list
-  socket.on('get-rooms', (callback) => {
-    const clientIp = getClientIp(socket);
-    const list = Array.from(rooms.values()).map(r => {
-      const existingPlayer = r.findPlayerByIp(clientIp);
-      return {
-        id: r.roomId,
-        roomId: r.roomId,
-        status: r.status,
-        playerCount: r.activeColors.filter(c => r.players[c] !== null).length,
-        spectatorsCount: r.spectators.size,
-        hasReconnectSlot: !!existingPlayer,
-        reconnectName: existingPlayer ? existingPlayer.name : null,
-        reconnectColor: existingPlayer ? existingPlayer.color : null
-      };
-    });
+  // Get active rooms list (ONLY returns rooms where the requesting user is a part of as host/player/spectator)
+  socket.on('get-rooms', (payload, callback) => {
+    let playerId = null;
+    let name = null;
+    if (typeof payload === 'function') {
+      callback = payload;
+    } else if (payload) {
+      playerId = payload.playerId;
+      name = payload.name;
+    }
+
+    const list = Array.from(rooms.values())
+      .filter(r => r.isUserInRoom(playerId, name, socket.id))
+      .map(r => {
+        const existingPlayer = r.findPlayerToReconnect(playerId, name);
+        const isSpectator = r.spectators.has(socket.id);
+        return {
+          id: r.roomId,
+          roomId: r.roomId,
+          status: r.status,
+          playerCount: r.activeColors.filter(c => r.players[c] !== null).length,
+          spectatorsCount: r.spectators.size,
+          hasReconnectSlot: !!existingPlayer || isSpectator,
+          isSpectator: isSpectator,
+          reconnectName: existingPlayer ? existingPlayer.name : null,
+          reconnectColor: existingPlayer ? existingPlayer.color : null
+        };
+      });
     if (typeof callback === 'function') callback(list);
   });
 
@@ -156,7 +168,7 @@ io.on('connection', (socket) => {
   });
 
   // Create Room
-  socket.on('create-room', ({ name, color, turnTimerDuration, botCount }, callback) => {
+  socket.on('create-room', ({ name, color, turnTimerDuration, botCount, playerId }, callback) => {
     let roomId = generateRoomId();
     while (rooms.has(roomId)) {
       roomId = generateRoomId();
@@ -179,17 +191,17 @@ io.on('connection', (socket) => {
     // Join socket room
     socket.join(roomId);
     
-    // Add player with IP tracking
+    // Add player with unique playerId tracking
     const chosenColor = color || 'red';
     const clientIp = getClientIp(socket);
-    const result = game.addPlayer(socket.id, name, chosenColor, clientIp);
+    const result = game.addPlayer(socket.id, name, chosenColor, clientIp, playerId);
     
     // Sync initial bots specified by host
     game.syncBotSlots();
 
     socketMap.set(socket.id, { roomId, role: 'player', color: chosenColor });
 
-    console.log(`🎮 Room ${roomId} created by ${name} (${chosenColor}) IP: ${clientIp}`);
+    console.log(`🎮 Room ${roomId} created by ${name} (${chosenColor}) IP: ${clientIp} PID: ${playerId || 'none'}`);
 
     if (typeof callback === 'function') {
       callback({ success: true, roomId, color: chosenColor, lanUrl: `http://${LAN_IP}:${currentPort}` });
@@ -198,8 +210,8 @@ io.on('connection', (socket) => {
     broadcastGameState(roomId);
   });
 
-  // Join Room (Player or Spectator with IP Reconnection Support)
-  socket.on('join-room', ({ roomId, name, color, asSpectator }, callback) => {
+  // Join Room (Player or Spectator with unique playerId & Username Reconnection Support)
+  socket.on('join-room', ({ roomId, name, color, asSpectator, playerId }, callback) => {
     roomId = (roomId || '').toUpperCase().trim();
     const game = rooms.get(roomId);
 
@@ -211,13 +223,13 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     const clientIp = getClientIp(socket);
 
-    // Check if player from this IP address is reconnecting to their existing slot
-    const existingPlayer = game.findPlayerByIp(clientIp);
+    // Check if player is reconnecting by unique playerId or exact name
+    const existingPlayer = game.findPlayerToReconnect(playerId, name);
     if (existingPlayer) {
-      const result = game.addPlayer(socket.id, name || existingPlayer.name, existingPlayer.color, clientIp);
+      const result = game.addPlayer(socket.id, name || existingPlayer.name, existingPlayer.color, clientIp, playerId);
       socketMap.set(socket.id, { roomId, role: 'player', color: result.color });
 
-      console.log(`🔄 ${name || existingPlayer.name} (IP: ${clientIp}) reconnected to Room ${roomId} as ${result.color} (isHost: ${result.isHost})`);
+      console.log(`🔄 ${name || existingPlayer.name} reconnected to Room ${roomId} as ${result.color} (isHost: ${result.isHost})`);
 
       if (typeof callback === 'function') {
         callback({ 
@@ -260,14 +272,14 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = game.addPlayer(socket.id, name, targetColor, clientIp);
+    const result = game.addPlayer(socket.id, name, targetColor, clientIp, playerId);
     if (!result.success) {
       if (typeof callback === 'function') callback(result);
       return;
     }
 
     socketMap.set(socket.id, { roomId, role: 'player', color: targetColor });
-    console.log(`👤 ${name} (IP: ${clientIp}) joined Room ${roomId} as ${targetColor}`);
+    console.log(`👤 ${name} joined Room ${roomId} as ${targetColor}`);
 
     if (typeof callback === 'function') {
       callback({ 

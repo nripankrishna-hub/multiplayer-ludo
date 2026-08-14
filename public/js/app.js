@@ -75,11 +75,23 @@ socket.on('network-info', ({ lanIp, port, lanUrl }) => {
   fetchRoomsList();
 });
 
+function getOrCreatePlayerId() {
+  let pid = localStorage.getItem('ludo_player_id');
+  if (!pid) {
+    pid = 'pid_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+    localStorage.setItem('ludo_player_id', pid);
+  }
+  return pid;
+}
+
+const myPlayerId = getOrCreatePlayerId();
+
 function fetchRoomsList() {
-  socket.emit('get-rooms', (rooms) => {
+  const currentTypedName = joinPlayerName ? joinPlayerName.value.trim() : '';
+  socket.emit('get-rooms', { playerId: myPlayerId, name: currentTypedName }, (rooms) => {
     roomsList.innerHTML = '';
     if (!rooms || rooms.length === 0) {
-      roomsList.innerHTML = '<div class="empty-rooms">No active rooms found. Create one above!</div>';
+      roomsList.innerHTML = '<div class="empty-rooms">No active rooms found for rejoining. Create a new room or join with a room code above!</div>';
       return;
     }
 
@@ -110,12 +122,12 @@ function fetchRoomsList() {
 }
 
 function handleJoinAvailableRoom(roomId, isReconnect, reconnectName, reconnectColor) {
-  // If this user has a saved player slot in this room (IP reconnection)
+  // If this user has a saved player slot in this room (unique playerId / name reconnection)
   if (isReconnect) {
     const defaultName = reconnectName || joinPlayerName.value.trim() || 'Player';
     const name = prompt(`Rejoining Room ${roomId}! Confirm your name:`, defaultName) || defaultName;
 
-    socket.emit('join-room', { roomId, name, color: reconnectColor, asSpectator: false }, (res) => {
+    socket.emit('join-room', { roomId, name, color: reconnectColor, asSpectator: false, playerId: myPlayerId }, (res) => {
       if (res.success) {
         myName = name;
         myRole = 'player';
@@ -140,7 +152,7 @@ function handleJoinAvailableRoom(roomId, isReconnect, reconnectName, reconnectCo
 
   const finalName = name.trim() || 'Spectator';
 
-  socket.emit('join-room', { roomId, name: finalName, asSpectator: true }, (res) => {
+  socket.emit('join-room', { roomId, name: finalName, asSpectator: true, playerId: myPlayerId }, (res) => {
     if (res.success) {
       myName = finalName;
       myRole = 'spectator';
@@ -233,7 +245,7 @@ function setupEventListeners() {
     const botCountSelect = document.getElementById('hostBotCount');
     const botCount = botCountSelect ? parseInt(botCountSelect.value, 10) : 3;
 
-    socket.emit('create-room', { name, color, turnTimerDuration: 20, botCount }, (res) => {
+    socket.emit('create-room', { name, color, turnTimerDuration: 20, botCount, playerId: myPlayerId }, (res) => {
       if (res.success) {
         myName = name;
         myRole = 'player';
@@ -256,7 +268,7 @@ function setupEventListeners() {
       return;
     }
 
-    socket.emit('join-room', { roomId, name, color: selectedJoinColor, asSpectator: false }, (res) => {
+    socket.emit('join-room', { roomId, name, color: selectedJoinColor, asSpectator: false, playerId: myPlayerId }, (res) => {
       if (res.success) {
         myName = name;
         myRole = 'player';
