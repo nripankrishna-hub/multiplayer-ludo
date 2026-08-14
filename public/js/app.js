@@ -627,33 +627,51 @@ function updateGameUI(state) {
   spectatorCount.innerText = spectatorsCount;
 
   // Turn status banner
+  // Turn status banner
   const turnPlayer = players[currentTurnColor];
   const turnName = turnPlayer ? turnPlayer.name : currentTurnColor.toUpperCase();
   
-  turnColorDot.style.background = `var(--color-${currentTurnColor})`;
-  turnColorDot.style.boxShadow = `0 0 10px var(--color-${currentTurnColor})`;
-  turnPlayerName.innerText = `${turnName}'s Turn`;
+  if (status === 'FINISHED') {
+    const winnerColor = state.winnerRankings ? state.winnerRankings[0] : currentTurnColor;
+    const winnerPlayer = players[winnerColor];
+    const winnerName = winnerPlayer ? winnerPlayer.name : (winnerColor ? winnerColor.toUpperCase() : 'Player');
 
-  if (status === 'WAITING') {
-    turnStatusText.innerText = 'Waiting for players to join...';
-    if (isHost) {
-      btnStartGame.style.display = 'inline-flex';
-      btnStartGame.disabled = false;
+    turnColorDot.style.background = '#fbbf24';
+    turnColorDot.style.boxShadow = '0 0 12px #fbbf24';
+    turnPlayerName.innerText = '🏆 Game Finished!';
+    turnStatusText.innerText = '🏆 Match Complete!';
+    movePrompt.innerText = `👑 Winner: ${winnerName}! Congratulations!`;
+    btnStartGame.style.display = 'none';
+    btnStartGame.disabled = true;
+
+    // Auto-trigger Victory Celebration & Fireworks modal if not already active!
+    if (!window.victoryModalShown) {
+      window.victoryModalShown = true;
+      showVictoryCelebration(winnerName, winnerColor, '1st');
+    }
+  } else {
+    window.victoryModalShown = false;
+    turnColorDot.style.background = `var(--color-${currentTurnColor})`;
+    turnColorDot.style.boxShadow = `0 0 10px var(--color-${currentTurnColor})`;
+    turnPlayerName.innerText = `${turnName}'s Turn`;
+
+    if (status === 'WAITING') {
+      turnStatusText.innerText = 'Waiting for players to join...';
+      if (isHost) {
+        btnStartGame.style.display = 'inline-flex';
+        btnStartGame.disabled = false;
+      } else {
+        btnStartGame.style.display = 'none';
+        btnStartGame.disabled = true;
+      }
     } else {
       btnStartGame.style.display = 'none';
       btnStartGame.disabled = true;
-    }
-  } else {
-    btnStartGame.style.display = 'none';
-    btnStartGame.disabled = true;
-    if (status === 'PLAYING') {
       if (turnPlayer && turnPlayer.isConnected === false) {
         turnStatusText.innerText = `🔌 Waiting for ${turnName} to reconnect...`;
       } else {
         turnStatusText.innerText = `Turn: ${turnName}`;
       }
-    } else if (status === 'FINISHED') {
-      turnStatusText.innerText = '🏆 Game Finished!';
     }
   }
 
@@ -671,17 +689,22 @@ function updateGameUI(state) {
     }
   });
 
-  // Roll Dice Button State (Disabled while token is mid-movement animation)
+  // Roll Dice Button State (Disabled while token is mid-movement animation or when game finished)
   const isAnimating = boardRenderer && (boardRenderer.animatingTokenKey !== null || boardRenderer.animatingCapturedDefenderKey !== null);
   const isMyTurn = myRole === 'player' && currentTurnColor === myColor && status === 'PLAYING' && turnPlayer && turnPlayer.isConnected !== false;
-  btnRollDice.disabled = !isMyTurn || hasRolled || isAnimating;
+  btnRollDice.disabled = !isMyTurn || hasRolled || isAnimating || status === 'FINISHED';
 
   if (lastDiceValue) {
     setDiceFace(lastDiceValue);
   }
 
   // Move Prompt text
-  if (status === 'WAITING') {
+  if (status === 'FINISHED') {
+    const winnerColor = state.winnerRankings ? state.winnerRankings[0] : currentTurnColor;
+    const winnerPlayer = players[winnerColor];
+    const winnerName = winnerPlayer ? winnerPlayer.name : (winnerColor ? winnerColor.toUpperCase() : 'Player');
+    movePrompt.innerText = `👑 Winner: ${winnerName}! Congratulations!`;
+  } else if (status === 'WAITING') {
     movePrompt.innerText = 'Host can start the game when ready!';
   } else if (turnPlayer && turnPlayer.isConnected === false) {
     movePrompt.innerText = `🔌 ${turnName} disconnected. Waiting for player to rejoin...`;
