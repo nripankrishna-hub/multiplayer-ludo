@@ -469,8 +469,85 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  align-items: stretch;
+  align-items: center;
   text-align: center;
+}
+
+.room-code-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-main);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.room-code-tag:hover {
+  background: rgba(51, 65, 85, 0.95);
+  border-color: #fbbf24;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(251, 191, 36, 0.25);
+}
+
+.room-code-tag strong {
+  font-family: 'Outfit', monospace;
+  font-size: 20px;
+  color: #fbbf24;
+  letter-spacing: 2.5px;
+}
+
+.btn-copy-code {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-copy-code:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+/* Toast Tooltip Popup */
+.copy-tooltip {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: #10b981;
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.5);
+  white-space: nowrap;
+  z-index: 100;
+}
+
+.copy-tooltip.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .host-controls-group {
@@ -688,7 +765,7 @@ body {
 
 @keyframes pawnHop {
   0% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-24px) scale(1.35) rotate(6deg); }
+  50% { transform: translateY(-22px) scale(1.28); }
   100% { transform: translateY(0) scale(1); }
 }
 
@@ -1296,6 +1373,89 @@ body {
   transform: scale(1.25) rotate(6deg);
   background: rgba(56, 189, 248, 0.25);
   box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+}
+
+/* Player Card Rank Badges */
+.won-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.won-badge.rank-1st {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #ffffff;
+  border: 1px solid #fef3c7;
+}
+.won-badge.rank-2nd {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  color: #ffffff;
+  border: 1px solid #f1f5f9;
+}
+.won-badge.rank-3rd {
+  background: linear-gradient(135deg, #b45309, #78350f);
+  color: #ffffff;
+  border: 1px solid #fde68a;
+}
+.won-badge.rank-4th {
+  background: linear-gradient(135deg, #475569, #334155);
+  color: #cbd5e1;
+}
+
+/* Floating Individual Win Celebration Banner */
+.win-banner-toast {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-120px);
+  z-index: 10005;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.win-banner-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.win-banner-content {
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid #fbbf24;
+  box-shadow: 0 10px 40px rgba(251, 191, 36, 0.4), 0 0 30px rgba(0, 0, 0, 0.8);
+  border-radius: 20px;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  backdrop-filter: blur(12px);
+}
+
+.win-banner-icon {
+  font-size: 42px;
+  animation: trophyBounce 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes trophyBounce {
+  0% { transform: scale(1) translateY(0); }
+  100% { transform: scale(1.28) translateY(-8px); }
+}
+
+.win-banner-text h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.win-banner-text p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* FIREWORKS / CRACKERS CANVAS */

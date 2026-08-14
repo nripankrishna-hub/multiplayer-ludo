@@ -148,24 +148,38 @@ class BoardRenderer {
     this.initTokensLayer();
   }
 
+  // Transform logical grid coordinates to player's visual orientation
+  getVisualCoords(r, c) {
+    const color = this.orientationColor || 'red';
+    switch (color) {
+      case 'green':
+        return { r: 14 - c, c: r };
+      case 'yellow':
+        return { r: 14 - r, c: 14 - c };
+      case 'blue':
+        return { r: c, c: 14 - r };
+      case 'red':
+      default:
+        return { r, c };
+    }
+  }
+
   // Orient board so the current player's starting base & path are ALWAYS at Bottom-Left!
   setBoardOrientation(playerColor) {
+    const targetColor = playerColor || 'red';
+    if (this.orientationColor === targetColor) return;
+    this.orientationColor = targetColor;
+
+    // Reset container CSS transform so animations remain 100% vertical on screen
     const boardWrapper = document.querySelector('.board-wrapper');
-    if (!boardWrapper) return;
+    if (boardWrapper) {
+      boardWrapper.style.transform = 'none';
+      boardWrapper.style.removeProperty('--board-rotation');
+      boardWrapper.style.removeProperty('--pawn-unrotate');
+    }
 
-    const rotationAngles = {
-      red: 0,
-      green: 90,
-      yellow: 180,
-      blue: 270
-    };
-
-    const angle = rotationAngles[playerColor] || 0;
-    const unrotate = -angle;
-
-    boardWrapper.style.setProperty('--board-rotation', `${angle}deg`);
-    boardWrapper.style.setProperty('--pawn-unrotate', `${unrotate}deg`);
-    boardWrapper.style.transform = `rotate(${angle}deg)`;
+    // Re-render board grid cells at visual coordinates for player's perspective
+    this.initBoardGrid();
   }
 
   // Create 15x15 Board Grid matching Image 1
@@ -177,19 +191,19 @@ class BoardRenderer {
 
         // Base Blocks
         if (r < 6 && c < 6) {
-          if (r === 0 && c === 0) this.createBaseBlock('green', 1, 1, 6, 6);
+          if (r === 0 && c === 0) this.createBaseBlock('green', 0, 0);
           continue;
         }
         if (r < 6 && c > 8) {
-          if (r === 0 && c === 9) this.createBaseBlock('yellow', 1, 10, 6, 6);
+          if (r === 0 && c === 9) this.createBaseBlock('yellow', 0, 9);
           continue;
         }
         if (r > 8 && c > 8) {
-          if (r === 9 && c === 9) this.createBaseBlock('blue', 10, 10, 6, 6);
+          if (r === 9 && c === 9) this.createBaseBlock('blue', 9, 9);
           continue;
         }
         if (r > 8 && c < 6) {
-          if (r === 9 && c === 0) this.createBaseBlock('red', 10, 1, 6, 6);
+          if (r === 9 && c === 0) this.createBaseBlock('red', 9, 0);
           continue;
         }
 
@@ -200,10 +214,11 @@ class BoardRenderer {
         }
 
         // Normal Track Cells
+        const vis = this.getVisualCoords(r, c);
         const cell = document.createElement('div');
         cell.className = 'board-cell';
-        cell.style.gridRow = `${r + 1}`;
-        cell.style.gridColumn = `${c + 1}`;
+        cell.style.gridRow = `${Math.round(vis.r) + 1}`;
+        cell.style.gridColumn = `${Math.round(vis.c) + 1}`;
 
         // Home Stretches
         if (r === 7 && c >= 1 && c <= 5) {
@@ -233,7 +248,7 @@ class BoardRenderer {
         if (r === 8 && c === 13) cell.classList.add('start-cell-blue');
         if (r === 13 && c === 6) cell.classList.add('start-cell-red');
 
-        // Safe Stars (Rendered ONLY on the 4 track safe spots for clean visual aesthetics)
+        // Safe Stars
         const isTrackSafe = (r === 8 && c === 2) || (r === 2 && c === 6) || (r === 6 && c === 12) || (r === 12 && c === 8);
 
         if (isTrackSafe) {
@@ -247,11 +262,16 @@ class BoardRenderer {
   }
 
   // Create Base Blocks matching Image 1
-  createBaseBlock(color, startRow, startCol, rowSpan, colSpan) {
+  createBaseBlock(color, startRow, startCol) {
+    const vis1 = this.getVisualCoords(startRow, startCol);
+    const vis2 = this.getVisualCoords(startRow + 5, startCol + 5);
+    const minR = Math.min(vis1.r, vis2.r);
+    const minC = Math.min(vis1.c, vis2.c);
+
     const baseCell = document.createElement('div');
     baseCell.className = `base-cell ${color}`;
-    baseCell.style.gridRow = `${startRow} / span ${rowSpan}`;
-    baseCell.style.gridColumn = `${startCol} / span ${colSpan}`;
+    baseCell.style.gridRow = `${Math.round(minR) + 1} / span 6`;
+    baseCell.style.gridColumn = `${Math.round(minC) + 1} / span 6`;
 
     const inner = document.createElement('div');
     inner.className = 'base-inner';
@@ -268,10 +288,15 @@ class BoardRenderer {
   }
 
   createCenterGoal() {
+    const vis1 = this.getVisualCoords(6, 6);
+    const vis2 = this.getVisualCoords(8, 8);
+    const minR = Math.min(vis1.r, vis2.r);
+    const minC = Math.min(vis1.c, vis2.c);
+
     const center = document.createElement('div');
     center.className = 'center-goal';
-    center.style.gridRow = '7 / span 3';
-    center.style.gridColumn = '7 / span 3';
+    center.style.gridRow = `${Math.round(minR) + 1} / span 3`;
+    center.style.gridColumn = `${Math.round(minC) + 1} / span 3`;
 
     center.innerHTML = `
       <svg viewBox="0 0 100 100" style="width:100%; height:100%; display:block;" preserveAspectRatio="none">
@@ -310,7 +335,7 @@ class BoardRenderer {
         tokenEl.dataset.tokenId = id;
         tokenEl.innerHTML = createPawnSVG(color, id + 1);
 
-        const baseCoord = BASE_SLOT_COORDS[color][id];
+        const baseCoord = this.getGridCoordinates(color, -1, id);
         tokenEl.style.left = `${(baseCoord.c / 15) * 100}%`;
         tokenEl.style.top = `${(baseCoord.r / 15) * 100}%`;
 
@@ -322,18 +347,19 @@ class BoardRenderer {
 
   // Calculate (r, c) grid coordinates for step
   getGridCoordinates(color, step, tokenId) {
+    let raw;
     if (step === -1) {
-      return BASE_SLOT_COORDS[color][tokenId];
+      raw = BASE_SLOT_COORDS[color][tokenId];
+    } else if (step === 56) {
+      raw = GOAL_TARGET_COORDS[color];
+    } else if (step >= 51) {
+      raw = HOME_STRETCH_COORDS[color][step - 51];
+    } else {
+      const startIdx = { green: 0, yellow: 13, blue: 26, red: 39 }[color];
+      const mainIdx = (startIdx + step) % 52;
+      raw = MAIN_PATH_COORDS[mainIdx];
     }
-    if (step === 56) {
-      return GOAL_TARGET_COORDS[color];
-    }
-    if (step >= 51) {
-      return HOME_STRETCH_COORDS[color][step - 51];
-    }
-    const startIdx = { green: 0, yellow: 13, blue: 26, red: 39 }[color];
-    const mainIdx = (startIdx + step) % 52;
-    return MAIN_PATH_COORDS[mainIdx];
+    return this.getVisualCoords(raw.r, raw.c);
   }
 
   // Position token smoothly using percentage left & top

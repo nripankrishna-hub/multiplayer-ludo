@@ -114,7 +114,10 @@ function fetchRoomsList() {
           <strong>ROOM: ${roomCode}</strong>
           <div>${r.playerCount}/4 Players • ${r.status} ${isReconnect ? '• <span style="color:#4ade80;font-weight:bold;">(Your Slot Saved)</span>' : ''}</div>
         </div>
-        ${actionButtonHtml}
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-secondary btn-sm" onclick="copyTextToClipboard('${roomCode}', this)" title="Copy Room Code">📋</button>
+          ${actionButtonHtml}
+        </div>
       `;
       roomsList.appendChild(card);
     });
@@ -359,16 +362,58 @@ function setupEventListeners() {
     }
   });
 
-  // Emote Buttons
-  const emoteBtns = document.querySelectorAll('.btn-emote');
-  emoteBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const emote = btn.dataset.emote;
-      if (currentRoomId) {
-        socket.emit('send-emote', { roomId: currentRoomId, emote });
-      }
+  // Copy Room Code Click Listener
+  const btnCopyRoomCode = document.getElementById('btnCopyRoomCode');
+  if (btnCopyRoomCode) {
+    btnCopyRoomCode.addEventListener('click', () => {
+      copyTextToClipboard(currentRoomId, btnCopyRoomCode);
     });
-  });
+  }
+}
+
+// Copy Text Helper (Supports Clipboard API with document.execCommand fallback)
+function copyTextToClipboard(text, targetEl) {
+  if (!text || text === '----') return;
+
+  const performCopy = () => {
+    if (targetEl) {
+      if (targetEl.id === 'btnCopyRoomCode' || targetEl.closest('#btnCopyRoomCode')) {
+        const tooltip = document.getElementById('copyTooltip');
+        if (tooltip) {
+          tooltip.classList.add('show');
+          setTimeout(() => tooltip.classList.remove('show'), 1800);
+        }
+      } else {
+        const originalText = targetEl.innerHTML;
+        targetEl.innerHTML = '✅ Copied!';
+        setTimeout(() => { targetEl.innerHTML = originalText; }, 1500);
+      }
+    }
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(performCopy).catch(() => {
+      fallbackCopy(text);
+      performCopy();
+    });
+  } else {
+    fallbackCopy(text);
+    performCopy();
+  }
+}
+
+function fallbackCopy(text) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.opacity = '0';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+  } catch (err) {}
+  document.body.removeChild(textArea);
 }
 
 function showGameView() {
@@ -435,11 +480,11 @@ socket.on('dice-rolled', ({ color, result }) => {
 function applyMoveToState(state, res) {
   if (!state || !state.tokens || !res) return;
   if (state.tokens[res.color]) {
-    const t = state.tokens[res.color].find(t => t.id === res.tokenId);
+    const t = state.tokens[res.color].find(t => Number(t.id) === Number(res.tokenId));
     if (t) t.step = res.newStep;
   }
   if (res.captured && state.tokens[res.captured.color]) {
-    const ct = state.tokens[res.captured.color].find(t => t.id === res.captured.tokenId);
+    const ct = state.tokens[res.captured.color].find(t => Number(t.id) === Number(res.captured.tokenId));
     if (ct) ct.step = -1;
   }
 }
@@ -450,17 +495,24 @@ socket.on('token-moved', (res) => {
     boardRenderer.animateMove(res, currentGameState, myColor, () => {
       sounds.playTokenStep();
     }, (wasCaptured) => {
+      // Update currentGameState with newStep so extra-turn re-renders don't pull token back!
+      applyMoveToState(currentGameState, res);
+
       if (wasCaptured) {
         sounds.playCapture();
+      } else if (res.playerJustFinished) {
+        showIndividualWinCelebration(res.finishedPlayerName || res.color, res.color, res.finishedRank || '1st');
       } else if (res.reachedGoal) {
         sounds.playGoal();
       }
 
       if (res.gameOver) {
-        const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
-        const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
-        const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
-        showVictoryCelebration(winnerName, winnerColor, '1st');
+        setTimeout(() => {
+          const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
+          const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
+          const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
+          showVictoryCelebration(winnerName, winnerColor, '1st');
+        }, 1500);
       }
 
       // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
@@ -482,17 +534,24 @@ socket.on('bot-action', (action) => {
       boardRenderer.animateMove(res, currentGameState, myColor, () => {
         sounds.playTokenStep();
       }, (wasCaptured) => {
+        // Update currentGameState with newStep so extra-turn re-renders don't pull token back!
+        applyMoveToState(currentGameState, res);
+
         if (wasCaptured) {
           sounds.playCapture();
+        } else if (res.playerJustFinished) {
+          showIndividualWinCelebration(res.finishedPlayerName || res.color, res.color, res.finishedRank || '1st');
         } else if (res.reachedGoal) {
           sounds.playGoal();
         }
 
         if (res.gameOver) {
-          const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
-          const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
-          const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
-          showVictoryCelebration(winnerName, winnerColor, '1st');
+          setTimeout(() => {
+            const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
+            const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
+            const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
+            showVictoryCelebration(winnerName, winnerColor, '1st');
+          }, 1500);
         }
 
         // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
@@ -599,7 +658,7 @@ function updateGameUI(state) {
   }
 
   // Update Player Cards in Sidebar
-  renderPlayerCards(players, currentTurnColor, isHost && status === 'WAITING', status);
+  renderPlayerCards(players, currentTurnColor, isHost && status === 'WAITING', status, state.winnerRankings);
 
   // Orient Board for Player (Starting base & movement at Bottom-Left!)
   boardRenderer.setBoardOrientation(myColor);
@@ -640,7 +699,7 @@ function updateGameUI(state) {
 }
 
 // Render Player Sidebar Cards
-function renderPlayerCards(players, currentTurnColor, canAddBot, gameStatus) {
+function renderPlayerCards(players, currentTurnColor, canAddBot, gameStatus, winnerRankings = []) {
   playersCardsGrid.innerHTML = '';
   const colors = ['red', 'green', 'yellow', 'blue'];
 
@@ -655,12 +714,20 @@ function renderPlayerCards(players, currentTurnColor, canAddBot, gameStatus) {
     if (currentTurnColor === c) card.classList.add('active-turn');
 
     if (p) {
+      let winBadgeHtml = '';
+      if (p.hasWon || (Array.isArray(winnerRankings) && winnerRankings.includes(c))) {
+        const rankIdx = Array.isArray(winnerRankings) ? winnerRankings.indexOf(c) : -1;
+        const rankClass = ['rank-1st', 'rank-2nd', 'rank-3rd', 'rank-4th'][rankIdx] || 'rank-1st';
+        const rankText = ['🥇 1st Place', '🥈 2nd Place', '🥉 3rd Place', '4th Place'][rankIdx] || '🏆 WON';
+        winBadgeHtml = `<span class="won-badge ${rankClass}">${rankText}</span>`;
+      }
+
       card.innerHTML = `
         <div class="player-info">
           <div class="player-info-name">${p.name}</div>
           <div class="player-tag">${p.isBot ? '🤖 AI Bot' : (p.socketId === socket.id ? '⭐ You' : 'Human')}</div>
         </div>
-        ${p.hasWon ? '<span class="won-badge">🏆 WON</span>' : ''}
+        ${winBadgeHtml}
       `;
     } else {
       card.innerHTML = `
@@ -818,6 +885,33 @@ function stopFireworks() {
   }
   const canvas = document.getElementById('fireworksCanvas');
   if (canvas) canvas.style.display = 'none';
+}
+
+// Individual Player Win Celebration Toast & Fanfare
+function showIndividualWinCelebration(playerName, color, rank = '1st') {
+  sounds.playVictory();
+  triggerVictoryConfetti();
+  startFireworks();
+
+  const winBanner = document.getElementById('individualWinBanner');
+  const winIcon = document.getElementById('winBannerIcon');
+  const winTitle = document.getElementById('winBannerTitle');
+  const winSubtitle = document.getElementById('winBannerSubtitle');
+
+  const rankIcons = { '1st': '🥇', '2nd': '🥈', '3rd': '🥉', '4th': '🎖️' };
+  const icon = rankIcons[rank] || '🏆';
+
+  if (winIcon) winIcon.innerText = icon;
+  if (winTitle) winTitle.innerText = `🎉 ${playerName} Secured ${rank} Place!`;
+  if (winSubtitle) winSubtitle.innerText = `Outstanding performance! All 4 tokens reached GOAL!`;
+
+  if (winBanner) {
+    winBanner.classList.add('show');
+    setTimeout(() => {
+      winBanner.classList.remove('show');
+      stopFireworks();
+    }, 4500);
+  }
 }
 
 // Victory Celebration Modal & Complete Match Statistics
