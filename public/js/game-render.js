@@ -338,11 +338,15 @@ class BoardRenderer {
       stackOffsetY = off.y;
     }
 
-    const leftPct = (coord.c / 15) * 100 + stackOffsetX;
-    const topPct = (coord.r / 15) * 100 + stackOffsetY;
+    const leftPct = `${((coord.c / 15) * 100 + stackOffsetX).toFixed(3)}%`;
+    const topPct = `${((coord.r / 15) * 100 + stackOffsetY).toFixed(3)}%`;
 
-    tokenEl.style.left = `${leftPct}%`;
-    tokenEl.style.top = `${topPct}%`;
+    if (tokenEl.style.left !== leftPct) {
+      tokenEl.style.left = leftPct;
+    }
+    if (tokenEl.style.top !== topPct) {
+      tokenEl.style.top = topPct;
+    }
   }
 
   // Clear highlights immediately when a move starts
@@ -388,21 +392,38 @@ class BoardRenderer {
           this.positionToken(tokenKey, color, t.step, t.id, count);
         }
 
+        // Check if token element is actively executing a step-hop or capture hit CSS animation
+        const isActivelyAnimating = tokenEl.classList.contains('step-hop') || tokenEl.classList.contains('captured-hit') || tokenEl.classList.contains('goal-reach');
+        
+        if (!isActivelyAnimating && this.animatingTokenKey === tokenKey) {
+          this.animatingTokenKey = null;
+        }
+
         // Movable highlight (ONLY when hasRolled is true AND not mid-animation)
+        const isTurnColor = currentTurnColor === color;
+        const isMovableToken = Array.isArray(movableTokens) && movableTokens.some(id => Number(id) === Number(t.id));
+        const isMovable = !isActivelyAnimating && hasRolled && isTurnColor && isMovableToken;
         const isMyTurn = currentTurnColor === myColor;
-        const isMovable = !this.animatingTokenKey && isMyTurn && hasRolled && currentTurnColor === color && movableTokens && movableTokens.some(id => Number(id) === Number(t.id));
 
         if (isMovable) {
-          tokenEl.classList.add('movable');
-          tokenEl.style.zIndex = `${100 + t.id}`;
-          tokenEl.onclick = (e) => {
-            e.stopPropagation();
-            this.clearMovableHighlights();
-            if (onTokenClick) onTokenClick(t.id);
-          };
+          if (!tokenEl.classList.contains('movable')) {
+            tokenEl.classList.add('movable');
+          }
+          tokenEl.style.zIndex = '9999';
+          if (isMyTurn) {
+            tokenEl.onclick = (e) => {
+              e.stopPropagation();
+              this.clearMovableHighlights();
+              if (onTokenClick) onTokenClick(t.id);
+            };
+          } else {
+            tokenEl.onclick = null;
+          }
         } else {
-          tokenEl.classList.remove('movable');
-          tokenEl.style.zIndex = `${20 + t.id}`;
+          if (tokenEl.classList.contains('movable')) {
+            tokenEl.classList.remove('movable');
+          }
+          tokenEl.style.zIndex = (currentTurnColor === color) ? '50' : '20';
           tokenEl.onclick = null;
         }
       });

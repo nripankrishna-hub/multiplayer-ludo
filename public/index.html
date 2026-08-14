@@ -272,16 +272,55 @@
       </div>
     </div>
 
-    <!-- VICTORY CELEBRATION MODAL -->
+    <!-- FULL SCREEN FIREWORKS / CRACKERS CANVAS -->
+    <canvas id="fireworksCanvas" class="fireworks-canvas" style="display: none;"></canvas>
+
+    <!-- VICTORY CELEBRATION & MATCH STATISTICS MODAL -->
     <div id="victoryModal" class="victory-modal-overlay" style="display: none;">
       <div class="victory-card glassmorphism">
-        <div class="trophy-icon">🏆</div>
-        <h1 class="victory-title" id="victoryTitle">VICTORY!</h1>
-        <p class="victory-subtitle" id="victorySubtitle">Player Red has won the game!</p>
-        <div class="victory-rank-badge" id="victoryRankBadge">1st PLACE CHAMPION</div>
-        <button class="btn btn-primary glow-button" onclick="closeVictoryModal()">
-          🎮 Continue Game
-        </button>
+        <div class="trophy-icon-wrapper">
+          <span class="sparkle-star s1">✨</span>
+          <span class="sparkle-star s2">⭐</span>
+          <div class="trophy-icon">🏆</div>
+          <span class="sparkle-star s3">✨</span>
+          <span class="sparkle-star s4">⭐</span>
+        </div>
+        
+        <h1 class="victory-title">🎉 MATCH FINISHED! 🎉</h1>
+        
+        <div class="champion-banner" id="championBanner">
+          <span class="champ-crown">👑</span>
+          <span class="champ-name" id="championName">Player 1</span>
+          <span class="champ-tag">1st PLACE CHAMPION</span>
+        </div>
+
+        <div class="stats-section-header">
+          <h3>📊 Complete Match Statistics</h3>
+        </div>
+
+        <!-- STATISTICS TABLE -->
+        <div class="stats-table-wrapper">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th title="Tokens Captured by Player">⚔️ Captured</th>
+                <th title="Times Captured by Opponents">💀 Times Lost</th>
+                <th title="Total Dice Rolls">🎲 Rolls</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody">
+              <!-- Dynamically populated by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="victory-actions">
+          <button class="btn btn-primary glow-button" onclick="closeVictoryModal()">
+            🎮 Close & View Board
+          </button>
+        </div>
       </div>
     </div>
 

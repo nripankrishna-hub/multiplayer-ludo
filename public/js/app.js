@@ -340,9 +340,9 @@ function setupEventListeners() {
     }
   });
 
-  // Roll Dice Button
+  // Roll Dice Button (ONLY enabled on player's active turn)
   btnRollDice.addEventListener('click', () => {
-    if (!currentRoomId || myRole !== 'player') return;
+    if (!currentRoomId || myRole !== 'player' || btnRollDice.disabled) return;
     btnRollDice.disabled = true;
     sounds.playDiceRoll();
     animateDiceRoll();
@@ -713,42 +713,151 @@ function showFloatingEmote(senderName, color, emote) {
   }, 2200);
 }
 
-// Victory Confetti
-function triggerVictoryConfetti() {
-  if (typeof confetti === 'function') {
-    confetti({
-      particleCount: 150,
-      spread: 90,
-      origin: { y: 0.5 }
-    });
+// FULL SCREEN HTML5 FIREWORKS / CRACKERS ANIMATION
+let fireworksInterval = null;
+
+function startFireworks() {
+  const canvas = document.getElementById('fireworksCanvas');
+  if (!canvas) return;
+
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  
+  let width = canvas.width = window.innerWidth;
+  let height = canvas.height = window.innerHeight;
+
+  const particles = [];
+  const colors = ['#f87171', '#4ade80', '#facc15', '#60a5fa', '#a855f7', '#ec4899', '#38bdf8'];
+
+  function createFirework() {
+    const x = Math.random() * width;
+    const y = Math.random() * (height * 0.5);
+    const count = 40 + Math.floor(Math.random() * 30);
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count;
+      const speed = 2 + Math.random() * 6;
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        alpha: 1,
+        decay: 0.015 + Math.random() * 0.02,
+        size: 3 + Math.random() * 3
+      });
+    }
   }
+
+  createFirework();
+  createFirework();
+  if (fireworksInterval) clearInterval(fireworksInterval);
+  fireworksInterval = setInterval(createFirework, 450);
+
+  function loop() {
+    if (canvas.style.display === 'none') return;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.08;
+      p.alpha -= p.decay;
+
+      if (p.alpha <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.alpha;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(loop);
+  }
+  loop();
 }
 
-// Victory Celebration Modal
+function stopFireworks() {
+  if (fireworksInterval) {
+    clearInterval(fireworksInterval);
+    fireworksInterval = null;
+  }
+  const canvas = document.getElementById('fireworksCanvas');
+  if (canvas) canvas.style.display = 'none';
+}
+
+// Victory Celebration Modal & Complete Match Statistics
 function showVictoryCelebration(winnerName, color, rank = '1st') {
   sounds.playVictory();
   triggerVictoryConfetti();
+  startFireworks();
 
   const victoryModal = document.getElementById('victoryModal');
-  const victoryTitle = document.getElementById('victoryTitle');
-  const victorySubtitle = document.getElementById('victorySubtitle');
-  const victoryRankBadge = document.getElementById('victoryRankBadge');
+  const championName = document.getElementById('championName');
+  const statsTableBody = document.getElementById('statsTableBody');
 
   if (!victoryModal) return;
 
-  const playerColorHex = {
-    red: '#f87171',
-    green: '#4ade80',
-    yellow: '#facc15',
-    blue: '#60a5fa'
-  }[color] || '#facc15';
+  if (championName) {
+    championName.innerText = winnerName || 'Player 1';
+  }
 
-  victoryTitle.innerText = `👑 ${winnerName} WINS!`;
-  victoryTitle.style.color = playerColorHex;
-  victorySubtitle.innerText = `🎉 Spectacular gameplay! Claimed ${rank} Place!`;
-  victoryRankBadge.innerText = `🏆 ${rank.toUpperCase()} PLACE CHAMPION`;
-  victoryRankBadge.style.borderColor = playerColorHex;
-  victoryRankBadge.style.boxShadow = `0 0 25px ${playerColorHex}`;
+  // Populate Complete Match Statistics Table
+  if (statsTableBody && currentGameState && currentGameState.players) {
+    statsTableBody.innerHTML = '';
+
+    const colors = ['red', 'green', 'yellow', 'blue'];
+    const activePlayers = [];
+
+    colors.forEach(c => {
+      const p = currentGameState.players[c];
+      if (p) {
+        activePlayers.push(p);
+      }
+    });
+
+    // Sort by winner rankings or finished goal tokens
+    activePlayers.sort((a, b) => {
+      const rankA = currentGameState.winnerRankings ? currentGameState.winnerRankings.indexOf(a.color) : -1;
+      const rankB = currentGameState.winnerRankings ? currentGameState.winnerRankings.indexOf(b.color) : -1;
+      if (rankA !== -1 && rankB !== -1) return rankA - rankB;
+      if (rankA !== -1) return -1;
+      if (rankB !== -1) return 1;
+      return 0;
+    });
+
+    activePlayers.forEach((p, idx) => {
+      const rankStr = ['🥇 1st', '🥈 2nd', '🥉 3rd', '4th'][idx] || `${idx + 1}th`;
+      const stats = p.stats || { capturedOpponents: 0, timesCaptured: 0, totalRolls: 0, sixesRolled: 0 };
+      const colorHex = { red: '#ef4444', green: '#22c55e', yellow: '#eab308', blue: '#3b82f6' }[p.color] || '#3b82f6';
+      
+      const tr = document.createElement('tr');
+      if (idx === 0) tr.className = 'winner-row';
+
+      tr.innerHTML = `
+        <td><strong>${rankStr}</strong></td>
+        <td>
+          <div class="stats-player-cell">
+            <span class="stats-color-dot" style="background:${colorHex}"></span>
+            <span>${p.name} ${p.isBot ? '🤖' : ''}</span>
+          </div>
+        </td>
+        <td><strong>⚔️ ${stats.capturedOpponents}</strong></td>
+        <td>💀 ${stats.timesCaptured}</td>
+        <td>🎲 ${stats.totalRolls} (${stats.sixesRolled} sixes)</td>
+      `;
+
+      statsTableBody.appendChild(tr);
+    });
+  }
 
   victoryModal.style.display = 'flex';
   setTimeout(() => {
@@ -757,6 +866,7 @@ function showVictoryCelebration(winnerName, color, rank = '1st') {
 }
 
 function closeVictoryModal() {
+  stopFireworks();
   const victoryModal = document.getElementById('victoryModal');
   if (victoryModal) {
     victoryModal.classList.remove('active');

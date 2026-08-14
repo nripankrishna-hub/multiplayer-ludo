@@ -176,9 +176,14 @@ io.on('connection', (socket) => {
 
     const game = new LudoEngine(roomId, { turnTimerDuration, botCount });
     
-    // Attach bot action & state change listeners
+    // Attach bot action, auto-move & state change listeners
     game.onBotAction = (action) => {
       io.to(roomId).emit('bot-action', action);
+      broadcastGameState(roomId);
+    };
+
+    game.onAutoMove = ({ color, tokenId, result }) => {
+      io.to(roomId).emit('token-moved', result);
       broadcastGameState(roomId);
     };
 
