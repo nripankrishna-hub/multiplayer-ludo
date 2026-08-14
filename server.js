@@ -195,6 +195,11 @@ io.on('connection', (socket) => {
     const chosenColor = color || 'red';
     const clientIp = getClientIp(socket);
     const result = game.addPlayer(socket.id, name, chosenColor, clientIp, playerId);
+    if (!result.success) {
+      rooms.delete(roomId);
+      if (typeof callback === 'function') callback(result);
+      return;
+    }
     
     // Sync initial bots specified by host
     game.syncBotSlots();
