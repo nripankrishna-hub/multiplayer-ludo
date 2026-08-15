@@ -316,9 +316,9 @@ class BoardRenderer {
     // [top, right, bottom, left] logical color order
     const orientationMap = {
       red:    ['yellow', 'blue',   'red',    'green'],
-      green:  ['green',  'yellow', 'blue',   'red'],
+      green:  ['blue',   'red',    'green',  'yellow'],
       yellow: ['red',    'green',  'yellow', 'blue'],
-      blue:   ['blue',   'red',    'green',  'yellow']
+      blue:   ['green',  'yellow', 'blue',   'red']
     };
     const orient = orientationMap[this.orientationColor || 'red'];
 
