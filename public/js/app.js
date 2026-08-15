@@ -444,6 +444,8 @@ function showGameView() {
 
 // Receive Game State Update
 socket.on('game-state', (state) => {
+  const wasFinished = currentGameState && currentGameState.status === 'FINISHED';
+
   if (boardRenderer && boardRenderer.animatingTokenKey && currentGameState && currentGameState.tokens) {
     // Preserve animating token step in incoming state payload to prevent premature jump to newStep
     const [animColor, animIdStr] = boardRenderer.animatingTokenKey.split('-');
@@ -458,6 +460,16 @@ socket.on('game-state', (state) => {
   }
   currentGameState = state;
   updateGameUI(state);
+
+  // Fallback: if game just transitioned to FINISHED and celebration wasn't triggered yet, fire it!
+  if (state.status === 'FINISHED' && !wasFinished && !window.victoryModalShown) {
+    // Delay to let any animation complete first
+    setTimeout(() => {
+      if (!window.victoryModalShown) {
+        triggerGameOverCelebration();
+      }
+    }, 2500);
+  }
 });
 
 // Dice Rolled Animation & Event - Immediately update state & highlights on EACH AND EVERY ROLL
@@ -500,19 +512,15 @@ socket.on('token-moved', (res) => {
 
       if (wasCaptured) {
         sounds.playCapture();
-      } else if (res.playerJustFinished) {
+      } else if (res.playerJustFinished && !res.gameOver) {
+        // Individual mid-game win celebration (not final game-over)
         showIndividualWinCelebration(res.finishedPlayerName || res.color, res.color, res.finishedRank || '1st');
       } else if (res.reachedGoal) {
         sounds.playGoal();
       }
 
-      if (res.gameOver) {
-        setTimeout(() => {
-          const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
-          const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
-          const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
-          showVictoryCelebration(winnerName, winnerColor, '1st');
-        }, 1500);
+      if (res.gameOver && !window.victoryModalShown) {
+        triggerGameOverCelebration();
       }
 
       // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
@@ -539,19 +547,14 @@ socket.on('bot-action', (action) => {
 
         if (wasCaptured) {
           sounds.playCapture();
-        } else if (res.playerJustFinished) {
+        } else if (res.playerJustFinished && !res.gameOver) {
           showIndividualWinCelebration(res.finishedPlayerName || res.color, res.color, res.finishedRank || '1st');
         } else if (res.reachedGoal) {
           sounds.playGoal();
         }
 
-        if (res.gameOver) {
-          setTimeout(() => {
-            const winnerColor = res.winnerRankings ? res.winnerRankings[0] : res.color;
-            const winnerPlayer = currentGameState && currentGameState.players ? currentGameState.players[winnerColor] : null;
-            const winnerName = winnerPlayer ? winnerPlayer.name : winnerColor.toUpperCase();
-            showVictoryCelebration(winnerName, winnerColor, '1st');
-          }, 1500);
+        if (res.gameOver && !window.victoryModalShown) {
+          triggerGameOverCelebration();
         }
 
         // Re-evaluate Roll Dice button and UI state NOW that movement animation has completed!
@@ -643,12 +646,6 @@ function updateGameUI(state) {
     movePrompt.innerText = `👑 Winner: ${winnerName}! Congratulations!`;
     btnStartGame.style.display = 'none';
     btnStartGame.disabled = true;
-
-    // Auto-trigger Victory Celebration & Fireworks modal if not already active!
-    if (!window.victoryModalShown) {
-      window.victoryModalShown = true;
-      showVictoryCelebration(winnerName, winnerColor, '1st');
-    }
   } else {
     window.victoryModalShown = false;
     turnColorDot.style.background = `var(--color-${currentTurnColor})`;
@@ -908,6 +905,27 @@ function stopFireworks() {
   }
   const canvas = document.getElementById('fireworksCanvas');
   if (canvas) canvas.style.display = 'none';
+}
+
+// Master Game Over Celebration — Big Trophy, Crackers, Music, and Match Results!
+function triggerGameOverCelebration() {
+  if (window.victoryModalShown) return; // Prevent double fire
+  window.victoryModalShown = true;
+
+  // Get winner info from currentGameState
+  const winnerColor = currentGameState && currentGameState.winnerRankings && currentGameState.winnerRankings[0]
+    ? currentGameState.winnerRankings[0]
+    : null;
+  const winnerPlayer = winnerColor && currentGameState.players ? currentGameState.players[winnerColor] : null;
+  const winnerName = winnerPlayer ? winnerPlayer.name : (winnerColor ? winnerColor.toUpperCase() : 'Player');
+
+  // Fire all celebration effects!
+  sounds.playVictory();
+  triggerVictoryConfetti();
+  startFireworks();
+
+  // Show the big Victory Modal with Match Statistics
+  showVictoryCelebration(winnerName, winnerColor || 'red', '1st');
 }
 
 // Individual Player Win Celebration Toast & Fanfare
