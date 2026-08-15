@@ -231,15 +231,25 @@ class BoardRenderer {
           cell.classList.add('path-red');
         }
 
-        // Entry Start Arrows
-        if (r === 7 && c === 0) {
-          cell.innerHTML = '<span class="entry-arrow green">&gt;</span>';
-        } else if (r === 0 && c === 7) {
-          cell.innerHTML = '<span class="entry-arrow yellow">v</span>';
-        } else if (r === 7 && c === 14) {
-          cell.innerHTML = '<span class="entry-arrow blue">&lt;</span>';
-        } else if (r === 14 && c === 7) {
-          cell.innerHTML = '<span class="entry-arrow red">^</span>';
+        // Entry Start Arrows (direction based on visual position after orientation)
+        const isEntryCell = (r === 7 && c === 0) || (r === 0 && c === 7) || (r === 7 && c === 14) || (r === 14 && c === 7);
+        if (isEntryCell) {
+          // Determine logical color of this entry cell
+          let entryColor = '';
+          if (r === 7 && c === 0) entryColor = 'green';
+          else if (r === 0 && c === 7) entryColor = 'yellow';
+          else if (r === 7 && c === 14) entryColor = 'blue';
+          else if (r === 14 && c === 7) entryColor = 'red';
+
+          // Arrow direction depends on visual position (which side of the board it lands on)
+          const visR = vis.r, visC = vis.c;
+          let arrowChar = '>';
+          if (Math.round(visC) === 0) arrowChar = '&gt;';       // Left edge → points right
+          else if (Math.round(visC) === 14) arrowChar = '&lt;';  // Right edge → points left
+          else if (Math.round(visR) === 0) arrowChar = 'v';       // Top edge → points down
+          else if (Math.round(visR) === 14) arrowChar = '^';      // Bottom edge → points up
+
+          cell.innerHTML = `<span class="entry-arrow ${entryColor}">${arrowChar}</span>`;
         }
 
         // Starting positions colored backgrounds
@@ -298,16 +308,30 @@ class BoardRenderer {
     center.style.gridRow = `${Math.round(minR) + 1} / span 3`;
     center.style.gridColumn = `${Math.round(minC) + 1} / span 3`;
 
+    // Triangle colors must rotate with board orientation!
+    // Logical layout (Red perspective): Top=Yellow, Right=Blue, Bottom=Red, Left=Green
+    const colorHex = {
+      green: '#00a651', yellow: '#f7b500', blue: '#0072bc', red: '#e52521'
+    };
+    // [top, right, bottom, left] logical color order
+    const orientationMap = {
+      red:    ['yellow', 'blue',   'red',    'green'],
+      green:  ['green',  'yellow', 'blue',   'red'],
+      yellow: ['red',    'green',  'yellow', 'blue'],
+      blue:   ['blue',   'red',    'green',  'yellow']
+    };
+    const orient = orientationMap[this.orientationColor || 'red'];
+
     center.innerHTML = `
       <svg viewBox="0 0 100 100" style="width:100%; height:100%; display:block;" preserveAspectRatio="none">
-        <!-- Top Triangle: Yellow -->
-        <polygon points="0,0 100,0 50,50" fill="#f7b500" />
-        <!-- Right Triangle: Blue -->
-        <polygon points="100,0 100,100 50,50" fill="#0072bc" />
-        <!-- Bottom Triangle: Red -->
-        <polygon points="0,100 100,100 50,50" fill="#e52521" />
-        <!-- Left Triangle: Green -->
-        <polygon points="0,0 0,100 50,50" fill="#00a651" />
+        <!-- Top Triangle -->
+        <polygon points="0,0 100,0 50,50" fill="${colorHex[orient[0]]}" />
+        <!-- Right Triangle -->
+        <polygon points="100,0 100,100 50,50" fill="${colorHex[orient[1]]}" />
+        <!-- Bottom Triangle -->
+        <polygon points="0,100 100,100 50,50" fill="${colorHex[orient[2]]}" />
+        <!-- Left Triangle -->
+        <polygon points="0,0 0,100 50,50" fill="${colorHex[orient[3]]}" />
 
         <!-- Diagonal X Lines & Border -->
         <line x1="0" y1="0" x2="100" y2="100" stroke="#000000" stroke-width="2" />
