@@ -343,6 +343,12 @@ function setupEventListeners() {
     }
   });
 
+  // Host Force Finish Game
+  const btnFinishGame = document.getElementById('btnFinishGame');
+  if (btnFinishGame) {
+    btnFinishGame.addEventListener('click', forceFinishGame);
+  }
+
   // Roll Dice Button (ONLY enabled on player's active turn)
   btnRollDice.addEventListener('click', () => {
     if (!currentRoomId || myRole !== 'player' || btnRollDice.disabled) return;
