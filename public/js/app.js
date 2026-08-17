@@ -416,6 +416,13 @@ function fallbackCopy(text) {
   document.body.removeChild(textArea);
 }
 
+function forceFinishGame() {
+  if (!isHost || !currentRoomId) return;
+  if (confirm("Are you sure you want to end the game early? The player with the most progress will win.")) {
+    socket.emit('force-finish', { roomId: currentRoomId });
+  }
+}
+
 function showGameView() {
   lobbyView.classList.remove('active');
   gameView.classList.add('active');
@@ -625,6 +632,12 @@ function updateGameUI(state) {
     btnDeleteRoom.style.display = isHost ? 'inline-flex' : 'none';
   }
 
+  const btnFinishGame = document.getElementById('btnFinishGame');
+  if (btnFinishGame) {
+    // Only show during active game for host
+    btnFinishGame.style.display = (isHost && status === 'PLAYING') ? 'inline-flex' : 'none';
+  }
+
   // Spectator badge
   spectatorBadge.style.display = spectatorsCount > 0 ? 'inline-flex' : 'none';
   spectatorCount.innerText = spectatorsCount;
@@ -824,6 +837,31 @@ function showFloatingEmote(senderName, color, emote) {
   setTimeout(() => {
     el.remove();
   }, 2200);
+}
+
+// TRIGGER CANVAS CONFETTI
+function triggerVictoryConfetti() {
+  if (typeof confetti !== 'function') return;
+  
+  const duration = 4500;
+  const animationEnd = Date.now() + duration;
+  const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 10000 };
+
+  function randomInRange(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  const interval = setInterval(function() {
+    const timeLeft = animationEnd - Date.now();
+
+    if (timeLeft <= 0) {
+      return clearInterval(interval);
+    }
+
+    const particleCount = 50 * (timeLeft / duration);
+    confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+    confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+  }, 250);
 }
 
 // FULL SCREEN HTML5 FIREWORKS / CRACKERS ANIMATION

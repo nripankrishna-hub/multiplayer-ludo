@@ -400,6 +400,21 @@ io.on('connection', (socket) => {
     broadcastGameState(roomId);
   });
 
+  // Force Finish Game (Host only)
+  socket.on('force-finish', ({ roomId }) => {
+    const game = rooms.get(roomId);
+    if (!game) return;
+    
+    // Only host can force finish
+    if (game.hostSocketId !== socket.id) return;
+    
+    game.forceFinish();
+    
+    // Trigger game over on clients by emitting a pseudo token-moved event with gameOver=true
+    // Or just broadcast game state and let the clients handle the FINISHED transition
+    broadcastGameState(roomId);
+  });
+
   // Chat message
   socket.on('send-chat', ({ roomId, message }) => {
     const game = rooms.get(roomId);
