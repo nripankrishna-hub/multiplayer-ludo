@@ -441,6 +441,17 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Trigger bot turn (from host)
+  socket.on('trigger-bot-turn', ({ roomId }) => {
+    const game = rooms.get(roomId);
+    if (!game) return;
+    
+    // Security check: only host can trigger bot turn
+    if (game.hostSocketId !== socket.id) return;
+    
+    game.checkAndTriggerBotTurn();
+  });
+
   // Emote reaction
   socket.on('send-emote', ({ roomId, emote }) => {
     const game = rooms.get(roomId);
