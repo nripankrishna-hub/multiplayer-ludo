@@ -482,7 +482,7 @@ socket.on('game-state', (state) => {
 // Dice Rolled Animation & Event - Immediately update state & highlights on EACH AND EVERY ROLL
 socket.on('dice-rolled', ({ color, result }) => {
   if (result && result.diceValue) {
-    setDiceFace(result.diceValue);
+    setDiceFace(result.diceValue, true);
   }
   if (color === myColor) {
     sounds.playDiceRoll();
@@ -542,7 +542,7 @@ socket.on('token-moved', (res) => {
 socket.on('bot-action', (action) => {
   if (action.type === 'ROLL') {
     sounds.playDiceRoll();
-    if (action.result && action.result.diceValue) setDiceFace(action.result.diceValue);
+    if (action.result && action.result.diceValue) setDiceFace(action.result.diceValue, true);
   } else if (action.type === 'MOVE' && action.result) {
     const res = action.result;
     if (res.success && res.oldStep !== undefined && res.newStep !== undefined) {
@@ -785,8 +785,10 @@ function addBotSlot(color) {
 let diceRotX = 0;
 let diceRotY = 0;
 
+let isDiceAnimating = false;
+
 // 3D Dice Face Setter (Continuous non-blinking rotation)
-function setDiceFace(val) {
+function setDiceFace(val, animate = false) {
   const targetMap = {
     1: { x: 0, y: 0 },
     2: { x: 0, y: 180 },
@@ -797,11 +799,23 @@ function setDiceFace(val) {
   };
   const target = targetMap[val] || targetMap[1];
 
-  diceRotX += 720 + target.x - (diceRotX % 360);
-  diceRotY += 720 + target.y - (diceRotY % 360);
+  if (animate) {
+    diceRotX += 720 + target.x - (diceRotX % 360);
+    diceRotY += 720 + target.y - (diceRotY % 360);
 
-  diceCube.style.transition = 'transform 0.55s cubic-bezier(0.25, 1, 0.5, 1)';
-  diceCube.style.transform = `rotateX(${diceRotX}deg) rotateY(${diceRotY}deg)`;
+    diceCube.style.transition = 'transform 0.55s cubic-bezier(0.25, 1, 0.5, 1)';
+    diceCube.style.transform = `rotateX(${diceRotX}deg) rotateY(${diceRotY}deg)`;
+    
+    isDiceAnimating = true;
+    setTimeout(() => { isDiceAnimating = false; }, 600);
+  } else {
+    if (isDiceAnimating) return; // Prevent snapping mid-roll
+    
+    diceRotX = target.x;
+    diceRotY = target.y;
+    diceCube.style.transition = 'none';
+    diceCube.style.transform = `rotateX(${diceRotX}deg) rotateY(${diceRotY}deg)`;
+  }
 }
 
 function animateDiceRoll() {
