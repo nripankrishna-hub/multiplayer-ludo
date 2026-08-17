@@ -362,6 +362,17 @@ function setupEventListeners() {
     }
   });
 
+  // Quick Emote Reactions
+  const emoteBtns = document.querySelectorAll('.btn-emote');
+  emoteBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const emote = btn.getAttribute('data-emote');
+      if (emote && currentRoomId) {
+        socket.emit('send-emote', { roomId: currentRoomId, emote });
+      }
+    });
+  });
+
   // Copy Room Code Click Listener
   const btnCopyRoomCode = document.getElementById('btnCopyRoomCode');
   if (btnCopyRoomCode) {
