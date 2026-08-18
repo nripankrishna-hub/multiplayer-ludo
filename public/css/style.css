@@ -657,6 +657,7 @@ body {
   align-items: center;
   justify-content: center;
   border: 2px solid #000000;
+  position: relative;
 }
 .base-cell.red    { background: #e52521; }
 .base-cell.green  { background: #00a651; }
@@ -1651,4 +1652,67 @@ body {
 .victory-actions {
   margin-top: 6px;
   width: 100%;
+}
+
+/* ==========================================================================
+   Targeted Base-to-Base Emote Styles
+   ========================================================================== */
+
+/* Player Name Label in Base */
+.base-player-name {
+  position: absolute;
+  bottom: 4px;
+  width: 100%;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 5px rgba(0,0,0,0.5);
+  pointer-events: none;
+  z-index: 10;
+  letter-spacing: 0.5px;
+}
+
+/* Gift/Reaction Button in Base */
+.base-gift-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 15;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.base-gift-btn:hover {
+  transform: scale(1.15) rotate(5deg);
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* Floating Animation Element */
+.floating-targeted-emote {
+  position: absolute;
+  font-size: 40px;
+  pointer-events: none;
+  z-index: 9999;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4));
+  transform: translate(-50%, -50%) scale(0.1);
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+  opacity: 0;
+  margin-top: -20px; /* Offset to center relative to coordinates */
+  margin-left: -20px;
 }

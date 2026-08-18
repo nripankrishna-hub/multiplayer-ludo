@@ -26,14 +26,14 @@
     <header class="main-header">
       <div class="brand">
         <span class="logo-icon">🎲</span>
-        <h1 class="logo-text">LAN LUDO <span class="badge-tag">ULTIMATE</span></h1>
+        <h1 class="logo-text">ONLINE MULTIPLAYER LUDO <span class="badge-tag">ULTIMATE</span></h1>
       </div>
 
       <div class="network-badge" id="lanBadge" title="Click to copy LAN URL">
         <span class="pulse-dot"></span>
-        <span class="lan-label">LAN IP:</span>
-        <span class="lan-url" id="lanUrlText">Detecting...</span>
-        <button class="btn-copy" id="btnCopyLan">📋 Copy</button>
+        <span class="lan-label" style="display: none;">LAN IP:</span>
+        <span class="lan-url" id="lanUrlText" style="display: none;">Detecting...</span>
+        <button class="btn-copy" id="btnCopyLan">📋 Copy LAN IP</button>
       </div>
 
       <div class="header-controls">
@@ -52,7 +52,7 @@
       <section id="lobbyView" class="view-panel active">
         <div class="lobby-card glassmorphism">
           <div class="lobby-header">
-            <h2>Welcome to LAN Ludo</h2>
+            <h2>Welcome to Online Multiplayer Ludo</h2>
             <p>Play locally with friends on your Wi-Fi/LAN, add AI bots, or watch as a spectator!</p>
           </div>
 
@@ -270,6 +270,7 @@
           <button class="tab-btn" onclick="switchStickerTab('laugh')">😂 Laugh</button>
           <button class="tab-btn" onclick="switchStickerTab('rage')">🤬 Taunts</button>
           <button class="tab-btn" onclick="switchStickerTab('luck')">🍀 Luck</button>
+          <button class="tab-btn" onclick="switchStickerTab('gifts')">🎁 Gifts</button>
         </div>
 
         <div class="sticker-grid" id="stickerGrid">

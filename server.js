@@ -78,7 +78,7 @@ function generateRoomId() {
 function broadcastGameState(roomId) {
   const game = rooms.get(roomId);
   if (!game) return;
-  
+
   const state = game.getState();
   io.to(roomId).emit('game-state', state);
 }
@@ -175,7 +175,7 @@ io.on('connection', (socket) => {
     }
 
     const game = new LudoEngine(roomId, { turnTimerDuration, botCount });
-    
+
     // Attach bot action, auto-move & state change listeners
     game.onBotAction = (action) => {
       io.to(roomId).emit('bot-action', action);
@@ -195,7 +195,7 @@ io.on('connection', (socket) => {
 
     // Join socket room
     socket.join(roomId);
-    
+
     // Add player with unique playerId tracking
     const chosenColor = color || 'red';
     const clientIp = getClientIp(socket);
@@ -205,7 +205,7 @@ io.on('connection', (socket) => {
       if (typeof callback === 'function') callback(result);
       return;
     }
-    
+
     // Sync initial bots specified by host
     game.syncBotSlots();
 
@@ -242,14 +242,14 @@ io.on('connection', (socket) => {
       console.log(`🔄 ${name || existingPlayer.name} reconnected to Room ${roomId} as ${result.color} (isHost: ${result.isHost})`);
 
       if (typeof callback === 'function') {
-        callback({ 
-          success: true, 
-          roomId, 
-          color: result.color, 
-          isSpectator: false, 
-          rejoined: true, 
-          isHost: !!result.isHost, 
-          message: `Reconnected as ${existingPlayer.name}` 
+        callback({
+          success: true,
+          roomId,
+          color: result.color,
+          isSpectator: false,
+          rejoined: true,
+          isHost: !!result.isHost,
+          message: `Reconnected as ${existingPlayer.name}`
         });
       }
       broadcastGameState(roomId);
@@ -260,7 +260,7 @@ io.on('connection', (socket) => {
       game.addSpectator(socket.id, name);
       socketMap.set(socket.id, { roomId, role: 'spectator' });
       console.log(`👁️ ${name} joined Room ${roomId} as Spectator`);
-      
+
       if (typeof callback === 'function') callback({ success: true, roomId, isSpectator: true, isHost: false });
       broadcastGameState(roomId);
       return;
@@ -292,12 +292,12 @@ io.on('connection', (socket) => {
     console.log(`👤 ${name} joined Room ${roomId} as ${targetColor}`);
 
     if (typeof callback === 'function') {
-      callback({ 
-        success: true, 
-        roomId, 
-        color: targetColor, 
-        isSpectator: false, 
-        isHost: !!result.isHost 
+      callback({
+        success: true,
+        roomId,
+        color: targetColor,
+        isSpectator: false,
+        isHost: !!result.isHost
       });
     }
 
@@ -404,12 +404,12 @@ io.on('connection', (socket) => {
   socket.on('force-finish', ({ roomId }) => {
     const game = rooms.get(roomId);
     if (!game) return;
-    
+
     // Only host can force finish
     if (game.hostSocketId !== socket.id) return;
-    
+
     game.forceFinish();
-    
+
     // Trigger game over on clients by emitting a pseudo token-moved event with gameOver=true
     // Or just broadcast game state and let the clients handle the FINISHED transition
     broadcastGameState(roomId);
@@ -445,18 +445,22 @@ io.on('connection', (socket) => {
   socket.on('trigger-bot-turn', ({ roomId }) => {
     const game = rooms.get(roomId);
     if (!game) return;
-    
+
     // Security check: only host can trigger bot turn
     if (game.hostSocketId !== socket.id) return;
-    
+
     game.checkAndTriggerBotTurn();
   });
 
   // Emote reaction
   socket.on('send-emote', ({ roomId, emote }) => {
+    console.log(`[Emote] ${socket.id} in room ${roomId} sending: ${emote}`);
     const game = rooms.get(roomId);
     const user = socketMap.get(socket.id);
-    if (!user) return;
+    if (!user) {
+      console.log(`[Emote Error] User not found in socketMap for socket ${socket.id}`);
+      return;
+    }
 
     let senderName = 'Guest';
     let color = user.color || 'spectator';
@@ -471,6 +475,35 @@ io.on('connection', (socket) => {
       socketId: socket.id,
       senderName,
       color,
+      emote
+    });
+  });
+
+  // Targeted Emote
+  socket.on('send-targeted-emote', ({ roomId, receiverColor, emote }) => {
+    console.log(`[Targeted Emote] ${socket.id} in ${roomId} sending ${emote} to ${receiverColor}`);
+    const game = rooms.get(roomId);
+    const user = socketMap.get(socket.id);
+    if (!user || !game) {
+      console.log(`[Targeted Emote Error] User or game not found. user=${!!user}, game=${!!game}`);
+      return;
+    }
+
+    let senderName = 'Guest';
+    let senderColor = user.color || 'spectator';
+
+    if (user.role === 'player' && game.players[user.color]) {
+      senderName = game.players[user.color].name;
+    } else if (game.spectators.has(socket.id)) {
+      senderName = game.spectators.get(socket.id).name;
+    }
+    
+    console.log(`[Targeted Emote] Resolved Sender: ${senderName} (${senderColor}) -> ${receiverColor}`);
+
+    io.to(roomId).emit('targeted-emote-received', {
+      senderName,
+      senderColor,
+      receiverColor,
       emote
     });
   });
@@ -519,7 +552,7 @@ io.on('connection', (socket) => {
     const user = socketMap.get(socket.id);
     if (user) {
       const { roomId } = user;
-      
+
       // Notify room for WebRTC cleanup
       socket.to(roomId).emit('webrtc-leave', { socketId: socket.id });
 

@@ -626,6 +626,23 @@ socket.on('emote-received', ({ senderName, color, emote }) => {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 });
 
+// Targeted Emote Received
+socket.on('targeted-emote-received', ({ senderName, senderColor, receiverColor, emote }) => {
+  if (boardRenderer) {
+    boardRenderer.animateTargetedEmote(senderColor, receiverColor, emote);
+  }
+
+  // Print in Chat for history
+  const msgEl = document.createElement('div');
+  msgEl.className = 'chat-msg';
+  const colorHex = {
+    red: '#f87171', green: '#4ade80', yellow: '#facc15', blue: '#60a5fa', spectator: '#38bdf8'
+  }[senderColor] || '#38bdf8';
+  msgEl.innerHTML = `<span class="sender" style="color:${colorHex}">${senderName}:</span> sent ${emote} to ${receiverColor.toUpperCase()}`;
+  chatMessages.appendChild(msgEl);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+});
+
 // Room Deleted Event (Broadcasted to all players & spectators when Host deletes room)
 socket.on('room-deleted', ({ message }) => {
   alert(message || 'The room has been closed by the host.');
@@ -709,6 +726,11 @@ function updateGameUI(state) {
         turnStatusText.innerText = `Turn: ${turnName}`;
       }
     }
+  }
+
+  // Update Base Names and Gift Buttons
+  if (boardRenderer) {
+    boardRenderer.updateBaseNames(state, myColor);
   }
 
   // Update Player Cards in Sidebar
@@ -1120,15 +1142,16 @@ const STICKER_CATEGORIES = {
   funny: ['🤡', '🤪', '💩', '👻', '🐔', '🍌', '🍆', '🗿', '💃', '🥸', '🐽', '🦄', '🙈', '🦖', '🎃'],
   laugh: ['🤣', '💀', '🤩', '💅', '🤑', '🕶️', '🔥', '💣', '🦾', '🥳', '😎', '🎉', '🍿', '👑', '💥'],
   rage: ['🤬', '👿', '🖕', '👊', '🧂', '🐢', '🐌', '💤', '❌', '👎', '🤮', '🤐', '🥱', '⚡', '💣'],
-  luck: ['🍀', '🔮', '🎯', '🎰', '🏆', '👑', '🌟', '💰', '🎲', '🧿', '✨', '💎', '🌈', '🔥', '🥇']
+  luck: ['🍀', '🔮', '🎯', '🎰', '🏆', '👑', '🌟', '💰', '🎲', '🧿', '✨', '💎', '🌈', '🔥', '🥇'],
+  gifts: ['🧻', '💣', '🌹', '⚰️', '🔥', '🔫', '🔪', '❤️', '💋', '🫂']
 };
 
-function toggleStickerDrawer(show) {
+function toggleStickerDrawer(show, defaultTab = 'funny') {
   const modal = document.getElementById('stickerDrawerModal');
   if (!modal) return;
 
   if (show) {
-    switchStickerTab('funny');
+    switchStickerTab(defaultTab);
     modal.style.display = 'flex';
     setTimeout(() => modal.classList.add('active'), 20);
   } else {
@@ -1153,9 +1176,20 @@ function switchStickerTab(cat) {
   `).join('');
 }
 
+window.targetedReceiverColor = null;
+window.openTargetedEmoteDrawer = function(color) {
+  window.targetedReceiverColor = color;
+  toggleStickerDrawer(true, 'gifts');
+};
+
 function sendSticker(emote) {
   if (currentRoomId) {
-    socket.emit('send-emote', { roomId: currentRoomId, emote });
+    if (window.targetedReceiverColor) {
+      socket.emit('send-targeted-emote', { roomId: currentRoomId, receiverColor: window.targetedReceiverColor, emote });
+      window.targetedReceiverColor = null;
+    } else {
+      socket.emit('send-emote', { roomId: currentRoomId, emote });
+    }
     toggleStickerDrawer(false);
 
     // Add to quick reactions grid (if not already there)

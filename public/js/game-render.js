@@ -294,6 +294,30 @@ class BoardRenderer {
     }
 
     baseCell.appendChild(inner);
+
+    // Player Name Label
+    const nameLabel = document.createElement('div');
+    nameLabel.className = `base-player-name name-${color}`;
+    nameLabel.id = `base-name-${color}`;
+    nameLabel.innerText = 'Empty';
+    baseCell.appendChild(nameLabel);
+
+    // Gift/Reaction Button
+    const giftBtn = document.createElement('button');
+    giftBtn.className = `base-gift-btn gift-${color}`;
+    giftBtn.id = `base-gift-${color}`;
+    giftBtn.innerHTML = '🎁';
+    giftBtn.title = `Send a reaction to ${color}`;
+    // We attach the click handler in app.js or directly here.
+    // Let's use a global function dispatch since app.js controls the sticker drawer.
+    giftBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof window.openTargetedEmoteDrawer === 'function') {
+        window.openTargetedEmoteDrawer(color);
+      }
+    });
+    baseCell.appendChild(giftBtn);
+
     this.container.appendChild(baseCell);
   }
 
@@ -630,5 +654,88 @@ class BoardRenderer {
 
       idx++;
     }, 190);
+  }
+
+  // Update names displayed on the bases
+  updateBaseNames(state, localColor = null) {
+    if (!state || !state.players) return;
+    const colors = ['red', 'green', 'yellow', 'blue'];
+    const myColor = localColor;
+
+    colors.forEach(c => {
+      const p = state.players[c];
+      const nameEl = document.getElementById(`base-name-${c}`);
+      const giftEl = document.getElementById(`base-gift-${c}`);
+      
+      if (p) {
+        if (nameEl) nameEl.innerText = p.name + (p.isBot ? ' 🤖' : '');
+        if (giftEl) {
+          // Display gift button if it's an opponent and game is playing
+          if (c === myColor || state.status !== 'PLAYING') {
+            giftEl.style.display = 'none';
+          } else {
+            giftEl.style.display = 'flex';
+          }
+        }
+      } else {
+        if (nameEl) nameEl.innerText = '';
+        if (giftEl) giftEl.style.display = 'none';
+      }
+    });
+  }
+
+  // Animate a targeted emote from sender's base to receiver's base
+  animateTargetedEmote(senderColor, receiverColor, emote) {
+    const receiverBase = document.querySelector(`.base-cell.${receiverColor}`);
+    if (!receiverBase) return;
+
+    let senderBase = document.querySelector(`.base-cell.${senderColor}`);
+    // If sender doesn't have a base (spectator), spawn from bottom center of screen
+    const sRect = senderBase ? senderBase.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight, width: 0, height: 0 };
+    const rRect = receiverBase.getBoundingClientRect();
+
+    const startX = sRect.left + sRect.width / 2;
+    const startY = sRect.top + sRect.height / 2;
+    const endX = rRect.left + rRect.width / 2;
+    const endY = rRect.top + rRect.height / 2;
+
+    const el = document.createElement('div');
+    el.className = 'floating-targeted-emote';
+    el.innerText = emote;
+    
+    // Explicitly override CSS that could interfere with Web Animations API
+    el.style.position = 'fixed';
+    el.style.left = '0px';
+    el.style.top = '0px';
+    el.style.zIndex = '99999';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'none'; // Prevent CSS transitions from conflicting
+    document.body.appendChild(el);
+
+    // Use Web Animations API for guaranteed sequence
+    try {
+      const animation = el.animate([
+        { transform: `translate(${startX}px, ${startY}px) translate(-50%, -50%) scale(0.1)`, opacity: 0 },
+        { transform: `translate(${startX}px, ${startY}px) translate(-50%, -50%) scale(2.0)`, opacity: 1, offset: 0.15 },
+        { transform: `translate(${endX}px, ${endY}px) translate(-50%, -50%) scale(1.5)`, opacity: 1, offset: 0.85 },
+        { transform: `translate(${endX}px, ${endY}px) translate(-50%, -50%) scale(3.0)`, opacity: 0, offset: 1 }
+      ], {
+        duration: 2500,
+        easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+        fill: 'forwards'
+      });
+
+      // Play pop sound when it approaches the end
+      setTimeout(() => {
+        if (typeof sounds !== 'undefined' && sounds.playEmote) {
+          sounds.playEmote();
+        }
+      }, 2000);
+
+      animation.onfinish = () => el.remove();
+    } catch (e) {
+      console.error('Animation failed:', e);
+      el.remove();
+    }
   }
 }
