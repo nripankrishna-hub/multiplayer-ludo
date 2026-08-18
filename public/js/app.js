@@ -191,7 +191,7 @@ function fetchAndRenderJoinColors(roomId) {
   if (!joinColorGroup || !joinColorSelector) return;
 
   roomId = (roomId || '').trim().toUpperCase();
-  if (!roomId || roomId.length < 4) {
+  if (!roomId || roomId.length !== 6) {
     joinColorGroup.style.display = 'none';
     selectedJoinColor = null;
     return;
