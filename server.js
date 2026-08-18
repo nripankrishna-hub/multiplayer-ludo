@@ -169,6 +169,7 @@ io.on('connection', (socket) => {
           spectatorsCount: r.spectators.size,
           hasReconnectSlot: !!existingPlayer || isSpectator,
           isSpectator: isSpectator,
+          isHost: (r.hostPlayerId === playerId) || (r.hostSocketId === socket.id),
           reconnectName: existingPlayer ? existingPlayer.name : null,
           reconnectColor: existingPlayer ? existingPlayer.color : null
         };
@@ -265,6 +266,30 @@ io.on('connection', (socket) => {
     }
 
     broadcastGameState(roomId);
+  });
+
+  // Delete Room (Only allowed for the Host)
+  socket.on('delete-room', ({ roomId, playerId }, callback) => {
+    roomId = (typeof roomId === 'string' ? roomId.toUpperCase().trim() : '').slice(0, MAX_ROOM_ID_LEN);
+    const game = rooms.get(roomId);
+    
+    if (!game) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Room not found' });
+      return;
+    }
+
+    if (game.hostPlayerId !== playerId && game.hostSocketId !== socket.id) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Only the host can delete this room.' });
+      return;
+    }
+
+    // Force disconnect everyone in the room
+    io.to(roomId).emit('room-deleted', 'The host has deleted this room.');
+    io.socketsLeave(roomId);
+    rooms.delete(roomId);
+    
+    console.log(`🗑️ Room ${roomId} deleted by host`);
+    if (typeof callback === 'function') callback({ success: true });
   });
 
   // Join Room (Player or Spectator with unique playerId & Username Reconnection Support)

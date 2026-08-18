@@ -334,9 +334,12 @@
           </table>
         </div>
 
-        <div class="victory-actions">
+        <div class="victory-actions" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
           <button class="btn btn-primary glow-button" onclick="closeVictoryModal()">
             🎮 Close & View Board
+          </button>
+          <button id="btnEndDeleteRoom" class="btn btn-danger glow-button" style="display: none;" onclick="handleDeleteRoom(currentRoomId)">
+            🗑️ Delete Room & Exit
           </button>
         </div>
       </div>

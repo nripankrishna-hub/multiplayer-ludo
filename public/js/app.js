@@ -80,6 +80,18 @@ socket.on('connect', () => {
   fetchRoomsList();
 });
 
+socket.on('disconnect', () => {
+  console.log('❌ Disconnected from server');
+});
+
+socket.on('room-deleted', (message) => {
+  alert(message || 'The host has deleted this room.');
+  currentRoomId = null;
+  isHost = false;
+  returnToLobby();
+});
+
+// ----------------------------------------------------
 // Called after room creation to store the LAN URL for the Copy LAN IP button
 function setLanUrl(lanUrl) {
   if (!lanUrl) return;
@@ -147,11 +159,32 @@ function fetchRoomsList() {
       actionsDiv.appendChild(copyBtn);
       actionsDiv.appendChild(actionBtn);
 
+      if (r.isHost) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger btn-sm';
+        deleteBtn.title = 'Delete Room';
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.addEventListener('click', () => handleDeleteRoom(roomCode));
+        actionsDiv.appendChild(deleteBtn);
+      }
+
       card.appendChild(infoDiv);
       card.appendChild(actionsDiv);
       roomsList.appendChild(card);
     });
   });
+}
+
+function handleDeleteRoom(roomId) {
+  if (confirm(`Are you sure you want to delete Room ${roomId}? This will disconnect all players.`)) {
+    socket.emit('delete-room', { roomId, playerId: myPlayerId }, (res) => {
+      if (res.success) {
+        fetchRoomsList(); // refresh list
+      } else {
+        alert(res.message || 'Failed to delete room');
+      }
+    });
+  }
 }
 
 function handleJoinAvailableRoom(roomId, isReconnect, reconnectName, reconnectColor) {
@@ -500,6 +533,16 @@ function showGameView() {
   if (typeof VoiceManager !== 'undefined' && currentRoomId) {
     VoiceManager.joinRoom(currentRoomId);
   }
+}
+
+function returnToLobby() {
+  gameView.classList.remove('active');
+  lobbyView.classList.add('active');
+  closeVictoryModal();
+  if (typeof VoiceManager !== 'undefined') {
+    VoiceManager.leaveRoom();
+  }
+  fetchRoomsList();
 }
 
 // Socket Real-Time Event Handlers
@@ -1234,6 +1277,12 @@ function showVictoryCelebration(winnerName, color, rank = '1st') {
 
       statsTableBody.appendChild(tr);
     });
+  }
+
+  // Show "Delete Room & Exit" only for the host
+  const btnEndDeleteRoom = document.getElementById('btnEndDeleteRoom');
+  if (btnEndDeleteRoom) {
+    btnEndDeleteRoom.style.display = isHost ? 'inline-block' : 'none';
   }
 
   victoryModal.style.display = 'flex';

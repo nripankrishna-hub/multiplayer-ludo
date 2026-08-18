@@ -434,6 +434,17 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+.room-card-info {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.room-card-info > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .room-card-info strong {
   font-size: 16px;
