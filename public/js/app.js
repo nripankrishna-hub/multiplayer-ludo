@@ -138,6 +138,8 @@ function fetchRoomsList() {
       actionsDiv.style.display = 'flex';
       actionsDiv.style.gap = '6px';
       actionsDiv.style.alignItems = 'center';
+      actionsDiv.style.flexShrink = '0';
+      actionsDiv.style.flexWrap = 'wrap';
 
       const copyBtn = document.createElement('button');
       copyBtn.className = 'btn btn-secondary btn-sm';
