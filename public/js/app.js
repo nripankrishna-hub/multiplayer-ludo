@@ -115,23 +115,40 @@ function fetchRoomsList() {
       const card = document.createElement('div');
       card.className = 'room-card-item';
 
-      let actionButtonHtml = '';
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'room-card-info';
+      infoDiv.innerHTML = `
+        <strong>ROOM: ${roomCode}</strong>
+        <div>${r.playerCount}/4 Players • ${r.status} ${isReconnect ? '• <span style="color:#4ade80;font-weight:bold;">(Your Slot Saved)</span>' : ''}</div>
+      `;
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.style.display = 'flex';
+      actionsDiv.style.gap = '6px';
+      actionsDiv.style.alignItems = 'center';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'btn btn-secondary btn-sm';
+      copyBtn.title = 'Copy Room Code';
+      copyBtn.textContent = '📋';
+      copyBtn.addEventListener('click', function() { copyTextToClipboard(roomCode, this); });
+
+      const actionBtn = document.createElement('button');
       if (isReconnect) {
-        actionButtonHtml = `<button class="btn btn-success btn-sm" onclick="handleJoinAvailableRoom('${roomCode}', true, '${r.reconnectName || ''}', '${r.reconnectColor || ''}')">🔄 Rejoin Game</button>`;
+        actionBtn.className = 'btn btn-success btn-sm';
+        actionBtn.textContent = '🔄 Rejoin Game';
+        actionBtn.addEventListener('click', () => handleJoinAvailableRoom(roomCode, true, r.reconnectName || '', r.reconnectColor || ''));
       } else {
-        actionButtonHtml = `<button class="btn btn-primary btn-sm" onclick="handleJoinAvailableRoom('${roomCode}', false)">🎮 Join Game</button>`;
+        actionBtn.className = 'btn btn-primary btn-sm';
+        actionBtn.textContent = '🎮 Join Game';
+        actionBtn.addEventListener('click', () => handleJoinAvailableRoom(roomCode, false));
       }
 
-      card.innerHTML = `
-        <div class="room-card-info">
-          <strong>ROOM: ${roomCode}</strong>
-          <div>${r.playerCount}/4 Players • ${r.status} ${isReconnect ? '• <span style="color:#4ade80;font-weight:bold;">(Your Slot Saved)</span>' : ''}</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <button class="btn btn-secondary btn-sm" onclick="copyTextToClipboard('${roomCode}', this)" title="Copy Room Code">📋</button>
-          ${actionButtonHtml}
-        </div>
-      `;
+      actionsDiv.appendChild(copyBtn);
+      actionsDiv.appendChild(actionBtn);
+
+      card.appendChild(infoDiv);
+      card.appendChild(actionsDiv);
       roomsList.appendChild(card);
     });
   });
