@@ -64,16 +64,29 @@ btnSoundToggle.addEventListener('click', () => {
   btnSoundToggle.innerText = isMuted ? '🔇' : '🔊';
 });
 
-// Receive Network Info from Server
-socket.on('network-info', ({ lanIp, port, lanUrl }) => {
-  lanUrlText.innerText = lanUrl;
-  btnCopyLan.onclick = () => {
-    navigator.clipboard.writeText(lanUrl).then(() => {
-      alert(`LAN URL copied: ${lanUrl}`);
-    });
-  };
+// Receive Network Info from Server (lanUrl is now only sent to the host on room creation,
+// so this handler just wires up the copy button if we receive it at connection time).
+socket.on('network-info', ({ lanUrl }) => {
+  // Only update/store if we received a URL (backwards-compat if server still sends it)
+  if (lanUrl) {
+    window._lanUrl = lanUrl;
+    lanUrlText.innerText = lanUrl;
+  }
   fetchRoomsList();
 });
+
+// Fetch rooms list as soon as the socket connects (server no longer pushes network-info on connect)
+socket.on('connect', () => {
+  fetchRoomsList();
+});
+
+// Called after room creation to store the LAN URL for the Copy LAN IP button
+function setLanUrl(lanUrl) {
+  if (!lanUrl) return;
+  window._lanUrl = lanUrl;
+  // Wire the copy button now that we have a URL
+  btnCopyLan.onclick = () => copyTextToClipboard(lanUrl, btnCopyLan);
+}
 
 function getOrCreatePlayerId() {
   let pid = localStorage.getItem('ludo_player_id');
@@ -255,6 +268,9 @@ function setupEventListeners() {
         myColor = res.color;
         currentRoomId = res.roomId;
         isHost = true;
+
+        // SECURITY: lanUrl is now only sent to the host (not broadcast to all clients)
+        if (res.lanUrl) setLanUrl(res.lanUrl);
 
         showGameView();
       }
@@ -595,33 +611,51 @@ socket.on('bot-action', (action) => {
   }
 });
 
-// Chat Received
-socket.on('chat-received', ({ sender, color, message, time }) => {
+// --- SECURITY: Safe helper to build a chat message DOM node without innerHTML ---
+// This prevents XSS by ensuring user-provided text (names, messages, emotes)
+// is always set via textContent, never injected as raw HTML.
+function buildChatMsgEl(senderName, colorHex, ...textParts) {
   const msgEl = document.createElement('div');
   msgEl.className = 'chat-msg';
-  msgEl.innerHTML = `<span class="sender" style="color:${color}">${sender}:</span> ${message}`;
+
+  const spanEl = document.createElement('span');
+  spanEl.className = 'sender';
+  spanEl.style.color = colorHex; // colorHex is always from a whitelisted map, not user input
+  spanEl.textContent = `${senderName}:`;
+
+  msgEl.appendChild(spanEl);
+  // Join all text parts into a single safe text node
+  msgEl.appendChild(document.createTextNode(' ' + textParts.join(' ')));
+  return msgEl;
+}
+
+// Chat Received
+socket.on('chat-received', ({ sender, color, message }) => {
+  // SECURITY: color comes from the server's whitelist, not raw user input
+  const colorHex = {
+    red: '#f87171', green: '#4ade80', yellow: '#facc15', blue: '#60a5fa',
+    spectator: '#38bdf8', cyan: '#38bdf8', white: '#f8fafc'
+  }[color] || '#38bdf8';
+
+  // SECURITY: buildChatMsgEl uses textContent, so sender and message are safe
+  const msgEl = buildChatMsgEl(sender || 'Player', colorHex, message);
   chatMessages.appendChild(msgEl);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 });
 
-// Emote Received Popup with Sender Name
+// Emote Received
 socket.on('emote-received', ({ senderName, color, emote }) => {
   sounds.playEmote();
   showFloatingEmote(senderName, color, emote);
 
   // Print in Chat for history
-  const msgEl = document.createElement('div');
-  msgEl.className = 'chat-msg';
   const colorHex = {
-    red: '#f87171',
-    green: '#4ade80',
-    yellow: '#facc15',
-    blue: '#60a5fa',
-    spectator: '#38bdf8',
-    cyan: '#38bdf8',
-    white: '#f8fafc'
+    red: '#f87171', green: '#4ade80', yellow: '#facc15', blue: '#60a5fa',
+    spectator: '#38bdf8', cyan: '#38bdf8', white: '#f8fafc'
   }[color] || '#38bdf8';
-  msgEl.innerHTML = `<span class="sender" style="color:${colorHex}">${senderName || 'Player'}:</span> ${emote}`;
+
+  // SECURITY: buildChatMsgEl uses textContent — emote text is safe
+  const msgEl = buildChatMsgEl(senderName || 'Player', colorHex, emote);
   chatMessages.appendChild(msgEl);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 });
@@ -633,12 +667,16 @@ socket.on('targeted-emote-received', ({ senderName, senderColor, receiverColor, 
   }
 
   // Print in Chat for history
-  const msgEl = document.createElement('div');
-  msgEl.className = 'chat-msg';
   const colorHex = {
     red: '#f87171', green: '#4ade80', yellow: '#facc15', blue: '#60a5fa', spectator: '#38bdf8'
   }[senderColor] || '#38bdf8';
-  msgEl.innerHTML = `<span class="sender" style="color:${colorHex}">${senderName}:</span> sent ${emote} to ${receiverColor.toUpperCase()}`;
+
+  // SECURITY: buildChatMsgEl uses textContent — all values are safe
+  const msgEl = buildChatMsgEl(
+    senderName || 'Player',
+    colorHex,
+    `sent ${emote} to ${(receiverColor || '').toUpperCase()}`
+  );
   chatMessages.appendChild(msgEl);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 });
@@ -795,29 +833,57 @@ function renderPlayerCards(players, currentTurnColor, canAddBot, gameStatus, win
     if (currentTurnColor === c) card.classList.add('active-turn');
 
     if (p) {
-      let winBadgeHtml = '';
+      // --- SECURITY: Use DOM APIs + textContent to prevent XSS from player names ---
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'player-info';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'player-info-name';
+      nameDiv.textContent = p.name; // textContent safely escapes any HTML in the name
+
+      const tagDiv = document.createElement('div');
+      tagDiv.className = 'player-tag';
+      tagDiv.textContent = p.isBot ? '🤖 AI Bot' : (p.socketId === socket.id ? '⭐ You' : 'Human');
+
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(tagDiv);
+      card.appendChild(infoDiv);
+
+      // Win badge uses only static rank strings from a local array — safe to use innerHTML
       if (p.hasWon || (Array.isArray(winnerRankings) && winnerRankings.includes(c))) {
         const rankIdx = Array.isArray(winnerRankings) ? winnerRankings.indexOf(c) : -1;
         const rankClass = ['rank-1st', 'rank-2nd', 'rank-3rd', 'rank-4th'][rankIdx] || 'rank-1st';
-        const rankText = ['🥇 1st Place', '🥈 2nd Place', '🥉 3rd Place', '4th Place'][rankIdx] || '🏆 WON';
-        winBadgeHtml = `<span class="won-badge ${rankClass}">${rankText}</span>`;
+        const rankText  = ['🥇 1st Place', '🥈 2nd Place', '🥉 3rd Place', '4th Place'][rankIdx] || '🏆 WON';
+        const badge = document.createElement('span');
+        badge.className = `won-badge ${rankClass}`;
+        badge.textContent = rankText; // static string, but textContent is still cleaner
+        card.appendChild(badge);
       }
-
-      card.innerHTML = `
-        <div class="player-info">
-          <div class="player-info-name">${p.name}</div>
-          <div class="player-tag">${p.isBot ? '🤖 AI Bot' : (p.socketId === socket.id ? '⭐ You' : 'Human')}</div>
-        </div>
-        ${winBadgeHtml}
-      `;
     } else {
-      card.innerHTML = `
-        <div class="player-info">
-          <div class="player-info-name" style="color: var(--text-muted);">Empty Slot</div>
-          <div class="player-tag">Waiting for player...</div>
-        </div>
-        ${canAddBot ? `<button class="btn btn-secondary btn-sm" onclick="addBotSlot('${c}')">+ Add Bot</button>` : ''}
-      `;
+      // Empty slot — all content is static strings, safe to use innerHTML here
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'player-info';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'player-info-name';
+      nameDiv.style.color = 'var(--text-muted)';
+      nameDiv.textContent = 'Empty Slot';
+
+      const tagDiv = document.createElement('div');
+      tagDiv.className = 'player-tag';
+      tagDiv.textContent = 'Waiting for player...';
+
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(tagDiv);
+      card.appendChild(infoDiv);
+
+      if (canAddBot) {
+        const botBtn = document.createElement('button');
+        botBtn.className = 'btn btn-secondary btn-sm';
+        botBtn.textContent = '+ Add Bot';
+        botBtn.addEventListener('click', () => addBotSlot(c));
+        card.appendChild(botBtn);
+      }
     }
 
     playersCardsGrid.appendChild(card);
@@ -885,10 +951,18 @@ function showFloatingEmote(senderName, color, emote) {
     white: '#f8fafc'
   }[color] || '#38bdf8';
 
-  el.innerHTML = `
-    <span class="emote-user-name" style="color: ${colorHex}">${senderName || 'Player'}:</span>
-    <span class="emote-icon">${emote}</span>
-  `;
+  // --- SECURITY: Build with DOM APIs to prevent XSS from senderName ---
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'emote-user-name';
+  nameSpan.style.color = colorHex; // colorHex is from a local whitelist, not user input
+  nameSpan.textContent = `${senderName || 'Player'}:`; // textContent escapes any HTML
+
+  const emoteSpan = document.createElement('span');
+  emoteSpan.className = 'emote-icon';
+  emoteSpan.textContent = emote; // server already limits this to MAX_EMOTE_LEN chars
+
+  el.appendChild(nameSpan);
+  el.appendChild(emoteSpan);
 
   const randomX = Math.random() * (window.innerWidth - 220) + 60;
   el.style.left = `${randomX}px`;
@@ -1096,25 +1170,50 @@ function showVictoryCelebration(winnerName, color, rank = '1st') {
     });
 
     activePlayers.forEach((p, idx) => {
-      const rankStr = ['🥇 1st', '🥈 2nd', '🥉 3rd', '4th'][idx] || `${idx + 1}th`;
-      const stats = p.stats || { capturedOpponents: 0, timesCaptured: 0, totalRolls: 0, sixesRolled: 0 };
+      const rankStr  = ['🥇 1st', '🥈 2nd', '🥉 3rd', '4th'][idx] || `${idx + 1}th`;
+      const stats    = p.stats || { capturedOpponents: 0, timesCaptured: 0, totalRolls: 0, sixesRolled: 0 };
       const colorHex = { red: '#ef4444', green: '#22c55e', yellow: '#eab308', blue: '#3b82f6' }[p.color] || '#3b82f6';
-      
+
       const tr = document.createElement('tr');
       if (idx === 0) tr.className = 'winner-row';
 
-      tr.innerHTML = `
-        <td><strong>${rankStr}</strong></td>
-        <td>
-          <div class="stats-player-cell">
-            <span class="stats-color-dot" style="background:${colorHex}"></span>
-            <span>${p.name} ${p.isBot ? '🤖' : ''}</span>
-          </div>
-        </td>
-        <td><strong>⚔️ ${stats.capturedOpponents}</strong></td>
-        <td>💀 ${stats.timesCaptured}</td>
-        <td>🎲 ${stats.totalRolls} (${stats.sixesRolled} sixes)</td>
-      `;
+      // --- SECURITY: Build stats row with DOM APIs to prevent XSS from p.name ---
+      const rankTd = document.createElement('td');
+      const rankStrong = document.createElement('strong');
+      rankStrong.textContent = rankStr; // static string, but consistent
+      rankTd.appendChild(rankStrong);
+
+      const nameTd = document.createElement('td');
+      const playerCell = document.createElement('div');
+      playerCell.className = 'stats-player-cell';
+
+      const colorDot = document.createElement('span');
+      colorDot.className = 'stats-color-dot';
+      colorDot.style.background = colorHex; // from a local whitelist map, safe
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = p.name + (p.isBot ? ' 🤖' : ''); // textContent escapes HTML
+
+      playerCell.appendChild(colorDot);
+      playerCell.appendChild(nameSpan);
+      nameTd.appendChild(playerCell);
+
+      const captureTd = document.createElement('td');
+      const captureStrong = document.createElement('strong');
+      captureStrong.textContent = `⚔️ ${stats.capturedOpponents}`;
+      captureTd.appendChild(captureStrong);
+
+      const capturedTd = document.createElement('td');
+      capturedTd.textContent = `💀 ${stats.timesCaptured}`;
+
+      const rollsTd = document.createElement('td');
+      rollsTd.textContent = `🎲 ${stats.totalRolls} (${stats.sixesRolled} sixes)`;
+
+      tr.appendChild(rankTd);
+      tr.appendChild(nameTd);
+      tr.appendChild(captureTd);
+      tr.appendChild(capturedTd);
+      tr.appendChild(rollsTd);
 
       statsTableBody.appendChild(tr);
     });

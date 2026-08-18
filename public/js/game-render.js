@@ -686,6 +686,12 @@ class BoardRenderer {
 
   // Animate a targeted emote from sender's base to receiver's base
   animateTargetedEmote(senderColor, receiverColor, emote) {
+    // SECURITY: Whitelist color values before using them in CSS selectors.
+    // This prevents CSS selector injection if a malicious payload is received.
+    const VALID_COLORS = ['red', 'green', 'yellow', 'blue'];
+    if (!VALID_COLORS.includes(receiverColor)) return;
+    if (senderColor && !VALID_COLORS.includes(senderColor)) return;
+
     const receiverBase = document.querySelector(`.base-cell.${receiverColor}`);
     if (!receiverBase) return;
 

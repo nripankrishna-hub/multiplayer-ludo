@@ -3,13 +3,45 @@ const http = require('http');
 const { Server } = require('socket.io');
 const os = require('os');
 const path = require('path');
+const { randomInt } = require('crypto'); // SECURITY: CSPRNG for room ID generation
 const { LudoEngine, COLORS } = require('./lib/ludo-engine.js');
 
 const app = express();
 const server = http.createServer(app);
+
+// --- SECURITY: HTTP security headers via helmet ---
+// Prevents clickjacking, MIME sniffing, XSS, and enforces CSP on all responses.
+let helmet;
+try {
+  helmet = require('helmet');
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:  ["'self'"],
+        scriptSrc:   ["'self'", "https://cdn.jsdelivr.net"],
+        styleSrc:    ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
+        fontSrc:     ["'self'", "https://fonts.gstatic.com"],
+        connectSrc:  ["'self'", "ws:", "wss:"],
+        imgSrc:      ["'self'", "data:"],
+        frameSrc:    ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false, // Required: WebRTC voice chat will break otherwise
+  }));
+  console.log('🛡️  Helmet security headers enabled');
+} catch (e) {
+  console.warn('⚠️  helmet not installed — run `npm install helmet` to enable HTTP security headers');
+}
+
+// --- SECURITY: Restrict CORS to known origins. Use env var in production. ---
+// Set ALLOWED_ORIGIN env var when deploying (e.g. https://yourdomain.com).
+// For LAN usage with no env var, we fall back to allowing any same-network origin
+// via wildcard — acceptable for a local-only deployment.
+const CORS_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: CORS_ORIGIN,
     methods: ['GET', 'POST']
   }
 });
@@ -64,12 +96,23 @@ const rooms = new Map();
 // Map of socketId -> { roomId, role: 'player'|'spectator', color }
 const socketMap = new Map();
 
-// Helper to generate 4-character Room ID
+// --- SECURITY: Allowed color values (used to whitelist all color-based inputs) ---
+const VALID_COLORS = new Set(['red', 'green', 'yellow', 'blue']);
+
+// --- SECURITY: Input length limits ---
+const MAX_NAME_LEN    = 24;   // player display names
+const MAX_MSG_LEN     = 300;  // chat messages
+const MAX_EMOTE_LEN   = 10;   // emoji string (a single emoji can be up to 8 bytes)
+const MAX_ROOM_ID_LEN = 6;    // room codes are 4 chars; allow a tiny margin
+
+// Helper to generate a 6-character Room ID using a CSPRNG
+// SECURITY: crypto.randomInt() is cryptographically secure (unlike Math.random()).
+// 6 chars from a 32-char alphabet = 32^6 ≈ 1 billion combinations, brute-force resistant.
 function generateRoomId() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let id = '';
-  for (let i = 0; i < 4; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 6; i++) {
+    id += chars[randomInt(0, chars.length)];
   }
   return id;
 }
@@ -96,14 +139,11 @@ function getClientIp(socket) {
 
 // Socket IO Event Routing
 io.on('connection', (socket) => {
-  console.log(`🔌 Client connected: ${socket.id} (IP: ${getClientIp(socket)})`);
+  // NOTE: We intentionally do NOT log the socket.id here to reduce noise in production.
+  // The client IP is logged when a room is created or joined instead.
+  // SECURITY: We no longer broadcast the LAN IP to every connecting client.
+  // The LAN URL is only returned to the room creator in the create-room callback.
 
-  // Send network LAN URL to client
-  socket.emit('network-info', {
-    lanIp: LAN_IP,
-    port: currentPort,
-    lanUrl: `http://${LAN_IP}:${currentPort}`
-  });
 
   // Get active rooms list (ONLY returns rooms where the requesting user is a part of as host/player/spectator)
   socket.on('get-rooms', (payload, callback) => {
@@ -169,12 +209,19 @@ io.on('connection', (socket) => {
 
   // Create Room
   socket.on('create-room', ({ name, color, turnTimerDuration, botCount, playerId }, callback) => {
+    // --- SECURITY: Validate & sanitize inputs ---
+    const safeName = (typeof name === 'string' ? name.trim() : 'Player').slice(0, MAX_NAME_LEN) || 'Player';
+    const safeColor = VALID_COLORS.has(color) ? color : 'red';
+    const safeBotCount = Math.max(0, Math.min(3, parseInt(botCount, 10) || 0));
+    const safeTurnTimer = Math.max(0, Math.min(300, parseInt(turnTimerDuration, 10) || 0));
+    const safePlayerId = (typeof playerId === 'string' ? playerId.slice(0, 64) : null);
+
     let roomId = generateRoomId();
     while (rooms.has(roomId)) {
       roomId = generateRoomId();
     }
 
-    const game = new LudoEngine(roomId, { turnTimerDuration, botCount });
+    const game = new LudoEngine(roomId, { turnTimerDuration: safeTurnTimer, botCount: safeBotCount });
 
     // Attach bot action, auto-move & state change listeners
     game.onBotAction = (action) => {
@@ -197,9 +244,8 @@ io.on('connection', (socket) => {
     socket.join(roomId);
 
     // Add player with unique playerId tracking
-    const chosenColor = color || 'red';
     const clientIp = getClientIp(socket);
-    const result = game.addPlayer(socket.id, name, chosenColor, clientIp, playerId);
+    const result = game.addPlayer(socket.id, safeName, safeColor, clientIp, safePlayerId);
     if (!result.success) {
       rooms.delete(roomId);
       if (typeof callback === 'function') callback(result);
@@ -209,12 +255,13 @@ io.on('connection', (socket) => {
     // Sync initial bots specified by host
     game.syncBotSlots();
 
-    socketMap.set(socket.id, { roomId, role: 'player', color: chosenColor });
+    socketMap.set(socket.id, { roomId, role: 'player', color: safeColor });
 
-    console.log(`🎮 Room ${roomId} created by ${name} (${chosenColor}) IP: ${clientIp} PID: ${playerId || 'none'}`);
+    console.log(`🎮 Room ${roomId} created by ${safeName} (${safeColor}) IP: ${clientIp}`);
 
     if (typeof callback === 'function') {
-      callback({ success: true, roomId, color: chosenColor, lanUrl: `http://${LAN_IP}:${currentPort}` });
+      // SECURITY: lanUrl is returned ONLY to the host (creator), not broadcast to all clients
+      callback({ success: true, roomId, color: safeColor, lanUrl: `http://${LAN_IP}:${currentPort}` });
     }
 
     broadcastGameState(roomId);
@@ -222,7 +269,11 @@ io.on('connection', (socket) => {
 
   // Join Room (Player or Spectator with unique playerId & Username Reconnection Support)
   socket.on('join-room', ({ roomId, name, color, asSpectator, playerId }, callback) => {
-    roomId = (roomId || '').toUpperCase().trim();
+    // --- SECURITY: Validate & sanitize inputs ---
+    roomId = (typeof roomId === 'string' ? roomId.toUpperCase().trim() : '').slice(0, MAX_ROOM_ID_LEN);
+    const safeName = (typeof name === 'string' ? name.trim() : 'Player').slice(0, MAX_NAME_LEN) || 'Player';
+    const safeColor = VALID_COLORS.has(color) ? color : null;
+    const safePlayerId = (typeof playerId === 'string' ? playerId.slice(0, 64) : null);
     const game = rooms.get(roomId);
 
     if (!game) {
@@ -234,12 +285,12 @@ io.on('connection', (socket) => {
     const clientIp = getClientIp(socket);
 
     // Check if player is reconnecting by unique playerId or exact name
-    const existingPlayer = game.findPlayerToReconnect(playerId, name);
+    const existingPlayer = game.findPlayerToReconnect(safePlayerId, safeName);
     if (existingPlayer) {
-      const result = game.addPlayer(socket.id, name || existingPlayer.name, existingPlayer.color, clientIp, playerId);
+      const result = game.addPlayer(socket.id, safeName || existingPlayer.name, existingPlayer.color, clientIp, safePlayerId);
       socketMap.set(socket.id, { roomId, role: 'player', color: result.color });
 
-      console.log(`🔄 ${name || existingPlayer.name} reconnected to Room ${roomId} as ${result.color} (isHost: ${result.isHost})`);
+      console.log(`🔄 Player reconnected to Room ${roomId} as ${result.color}`);
 
       if (typeof callback === 'function') {
         callback({
@@ -257,9 +308,9 @@ io.on('connection', (socket) => {
     }
 
     if (asSpectator) {
-      game.addSpectator(socket.id, name);
+      game.addSpectator(socket.id, safeName);
       socketMap.set(socket.id, { roomId, role: 'spectator' });
-      console.log(`👁️ ${name} joined Room ${roomId} as Spectator`);
+      console.log(`👁️ Spectator joined Room ${roomId}`);
 
       if (typeof callback === 'function') callback({ success: true, roomId, isSpectator: true, isHost: false });
       broadcastGameState(roomId);
@@ -272,7 +323,7 @@ io.on('connection', (socket) => {
     }
 
     // Try joining as player
-    let targetColor = color;
+    let targetColor = safeColor;
     if (!targetColor) {
       targetColor = COLORS.find(c => !game.players[c] || game.players[c].isBot);
     }
@@ -282,14 +333,14 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = game.addPlayer(socket.id, name, targetColor, clientIp, playerId);
+    const result = game.addPlayer(socket.id, safeName, targetColor, clientIp, safePlayerId);
     if (!result.success) {
       if (typeof callback === 'function') callback(result);
       return;
     }
 
     socketMap.set(socket.id, { roomId, role: 'player', color: targetColor });
-    console.log(`👤 ${name} joined Room ${roomId} as ${targetColor}`);
+    console.log(`👤 Player joined Room ${roomId} as ${targetColor}`);
 
     if (typeof callback === 'function') {
       callback({
@@ -306,12 +357,17 @@ io.on('connection', (socket) => {
 
   // Add Bot (Host only)
   socket.on('add-bot', ({ roomId, color }, callback) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    const safeColor = VALID_COLORS.has(color) ? color : null;
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
-    const added = game.addBot(color);
+    const added = safeColor ? game.addBot(safeColor) : false;
     if (added) {
-      broadcastGameState(roomId);
+      broadcastGameState(safeRoomId);
       if (typeof callback === 'function') callback({ success: true });
     } else {
       if (typeof callback === 'function') callback({ success: false, message: 'Could not add bot' });
@@ -320,18 +376,27 @@ io.on('connection', (socket) => {
 
   // Set Bot Count (Host only)
   socket.on('set-bot-count', ({ roomId, botCount }, callback) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    const safeBotCount = Math.max(0, Math.min(3, parseInt(botCount, 10) || 0));
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
     if (game.hostSocketId !== socket.id) return;
 
-    game.setBotCount(botCount);
-    broadcastGameState(roomId);
+    game.setBotCount(safeBotCount);
+    broadcastGameState(safeRoomId);
     if (typeof callback === 'function') callback({ success: true });
   });
 
   // Start Game (Host only)
   socket.on('start-game', ({ roomId }, callback) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     const result = game.startGame();
@@ -340,10 +405,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    console.log(`🚀 Game started in Room ${roomId}`);
+    console.log(`🚀 Game started in Room ${safeRoomId}`);
 
     if (typeof callback === 'function') callback({ success: true });
-    broadcastGameState(roomId);
+    broadcastGameState(safeRoomId);
   });
 
   // Delete / Close Room (Host only)
@@ -376,48 +441,67 @@ io.on('connection', (socket) => {
 
   // Roll Dice
   socket.on('roll-dice', ({ roomId }) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     const user = socketMap.get(socket.id);
     if (!user || user.role !== 'player') return;
 
     const result = game.rollDice(user.color);
-    io.to(roomId).emit('dice-rolled', { color: user.color, result });
-    broadcastGameState(roomId);
+    io.to(safeRoomId).emit('dice-rolled', { color: user.color, result });
+    broadcastGameState(safeRoomId);
   });
 
   // Move Token
   socket.on('move-token', ({ roomId, tokenId }) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    // tokenId must be a non-negative integer
+    const safeTokenId = Number.isInteger(tokenId) && tokenId >= 0 && tokenId <= 3 ? tokenId : null;
+    if (safeTokenId === null) return;
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     const user = socketMap.get(socket.id);
     if (!user || user.role !== 'player') return;
 
-    const result = game.moveToken(user.color, tokenId);
-    io.to(roomId).emit('token-moved', result);
-    broadcastGameState(roomId);
+    const result = game.moveToken(user.color, safeTokenId);
+    io.to(safeRoomId).emit('token-moved', result);
+    broadcastGameState(safeRoomId);
   });
 
   // Force Finish Game (Host only)
   socket.on('force-finish', ({ roomId }) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     // Only host can force finish
     if (game.hostSocketId !== socket.id) return;
 
     game.forceFinish();
-
-    // Trigger game over on clients by emitting a pseudo token-moved event with gameOver=true
-    // Or just broadcast game state and let the clients handle the FINISHED transition
-    broadcastGameState(roomId);
+    broadcastGameState(safeRoomId);
   });
 
   // Chat message
   socket.on('send-chat', ({ roomId, message }) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate input types and length before processing ---
+    if (typeof roomId !== 'string' || typeof message !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    // Trim the message and cap its length to prevent payload amplification
+    const safeMessage = message.trim().slice(0, MAX_MSG_LEN);
+    if (!safeMessage) return;
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     const user = socketMap.get(socket.id);
@@ -433,17 +517,21 @@ io.on('connection', (socket) => {
       color = 'cyan';
     }
 
-    io.to(roomId).emit('chat-received', {
+    io.to(safeRoomId).emit('chat-received', {
       sender: senderName,
       color,
-      message,
+      message: safeMessage,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
   });
 
   // Trigger bot turn (from host)
   socket.on('trigger-bot-turn', ({ roomId }) => {
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate roomId type and length ---
+    if (typeof roomId !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+
+    const game = rooms.get(safeRoomId);
     if (!game) return;
 
     // Security check: only host can trigger bot turn
@@ -454,40 +542,45 @@ io.on('connection', (socket) => {
 
   // Emote reaction
   socket.on('send-emote', ({ roomId, emote }) => {
-    console.log(`[Emote] ${socket.id} in room ${roomId} sending: ${emote}`);
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate input types and length ---
+    if (typeof roomId !== 'string' || typeof emote !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    const safeEmote  = emote.trim().slice(0, MAX_EMOTE_LEN);
+    if (!safeEmote) return;
+
+    const game = rooms.get(safeRoomId);
     const user = socketMap.get(socket.id);
-    if (!user) {
-      console.log(`[Emote Error] User not found in socketMap for socket ${socket.id}`);
-      return;
-    }
+    if (!user || !game) return;
 
     let senderName = 'Guest';
     let color = user.color || 'spectator';
 
-    if (user.role === 'player' && game && game.players[user.color]) {
+    if (user.role === 'player' && game.players[user.color]) {
       senderName = game.players[user.color].name;
-    } else if (game && game.spectators.has(socket.id)) {
+    } else if (game.spectators.has(socket.id)) {
       senderName = game.spectators.get(socket.id).name;
     }
 
-    io.to(roomId).emit('emote-received', {
-      socketId: socket.id,
+    io.to(safeRoomId).emit('emote-received', {
       senderName,
       color,
-      emote
+      emote: safeEmote
     });
   });
 
   // Targeted Emote
   socket.on('send-targeted-emote', ({ roomId, receiverColor, emote }) => {
-    console.log(`[Targeted Emote] ${socket.id} in ${roomId} sending ${emote} to ${receiverColor}`);
-    const game = rooms.get(roomId);
+    // --- SECURITY: Validate input types, length, and whitelist the color value ---
+    if (typeof roomId !== 'string' || typeof emote !== 'string') return;
+    const safeRoomId = roomId.toUpperCase().trim().slice(0, MAX_ROOM_ID_LEN);
+    const safeEmote  = emote.trim().slice(0, MAX_EMOTE_LEN);
+    // SECURITY: receiverColor must be one of the four known game colors
+    if (!VALID_COLORS.has(receiverColor)) return;
+    if (!safeEmote) return;
+
+    const game = rooms.get(safeRoomId);
     const user = socketMap.get(socket.id);
-    if (!user || !game) {
-      console.log(`[Targeted Emote Error] User or game not found. user=${!!user}, game=${!!game}`);
-      return;
-    }
+    if (!user || !game) return;
 
     let senderName = 'Guest';
     let senderColor = user.color || 'spectator';
@@ -497,14 +590,12 @@ io.on('connection', (socket) => {
     } else if (game.spectators.has(socket.id)) {
       senderName = game.spectators.get(socket.id).name;
     }
-    
-    console.log(`[Targeted Emote] Resolved Sender: ${senderName} (${senderColor}) -> ${receiverColor}`);
 
-    io.to(roomId).emit('targeted-emote-received', {
+    io.to(safeRoomId).emit('targeted-emote-received', {
       senderName,
       senderColor,
       receiverColor,
-      emote
+      emote: safeEmote
     });
   });
 
