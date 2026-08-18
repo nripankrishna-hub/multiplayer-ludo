@@ -37,6 +37,7 @@
       </div>
 
       <div class="header-controls">
+        <button id="btnMicToggle" class="btn-icon" title="Toggle Microphone" style="display: none;">🎤</button>
         <button id="btnSoundToggle" class="btn-icon" title="Toggle Sound">🔊</button>
         <div class="spectator-counter" id="spectatorBadge" style="display: none;">
           👁️ <span id="spectatorCount">0</span> Spectators
@@ -342,9 +343,13 @@
 
   </div>
 
+  <!-- Invisible container for incoming WebRTC audio streams -->
+  <div id="audioPeersContainer" style="display: none;"></div>
+
   <!-- Scripts -->
   <script src="js/audio.js"></script>
   <script src="js/game-render.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/voice.js"></script>
 </body>
 </html>

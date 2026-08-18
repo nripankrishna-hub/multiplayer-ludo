@@ -475,12 +475,54 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ==========================================
+  // WebRTC Signaling for Voice Chat
+  // ==========================================
+
+  socket.on('webrtc-join', ({ roomId }) => {
+    // Notify all OTHER clients in the room that a new peer wants to connect
+    socket.to(roomId).emit('webrtc-join', { socketId: socket.id });
+  });
+
+  socket.on('webrtc-offer', ({ targetSocketId, offer }) => {
+    // Relay offer to the specific target socket
+    socket.to(targetSocketId).emit('webrtc-offer', {
+      socketId: socket.id,
+      offer
+    });
+  });
+
+  socket.on('webrtc-answer', ({ targetSocketId, answer }) => {
+    // Relay answer back to the offering socket
+    socket.to(targetSocketId).emit('webrtc-answer', {
+      socketId: socket.id,
+      answer
+    });
+  });
+
+  socket.on('webrtc-ice-candidate', ({ targetSocketId, candidate }) => {
+    // Relay ICE candidate to the target socket
+    socket.to(targetSocketId).emit('webrtc-ice-candidate', {
+      socketId: socket.id,
+      candidate
+    });
+  });
+
+  socket.on('webrtc-leave', ({ roomId }) => {
+    // Notify room that this peer is leaving voice chat
+    socket.to(roomId).emit('webrtc-leave', { socketId: socket.id });
+  });
+
   // Disconnect handler
   socket.on('disconnect', () => {
     console.log(`❌ Client disconnected: ${socket.id}`);
     const user = socketMap.get(socket.id);
     if (user) {
       const { roomId } = user;
+      
+      // Notify room for WebRTC cleanup
+      socket.to(roomId).emit('webrtc-leave', { socketId: socket.id });
+
       const game = rooms.get(roomId);
       if (game) {
         game.removePlayer(socket.id);

@@ -462,6 +462,11 @@ function showGameView() {
       btnStartGame.disabled = true;
     }
   }
+
+  // Join Voice Chat
+  if (typeof VoiceManager !== 'undefined' && currentRoomId) {
+    VoiceManager.joinRoom(currentRoomId);
+  }
 }
 
 // Socket Real-Time Event Handlers
@@ -624,6 +629,10 @@ socket.on('emote-received', ({ senderName, color, emote }) => {
 // Room Deleted Event (Broadcasted to all players & spectators when Host deletes room)
 socket.on('room-deleted', ({ message }) => {
   alert(message || 'The room has been closed by the host.');
+
+  if (typeof VoiceManager !== 'undefined') {
+    VoiceManager.leaveRoom();
+  }
 
   myRole = null;
   myColor = null;
@@ -1148,5 +1157,31 @@ function sendSticker(emote) {
   if (currentRoomId) {
     socket.emit('send-emote', { roomId: currentRoomId, emote });
     toggleStickerDrawer(false);
+
+    // Add to quick reactions grid (if not already there)
+    const emoteGrid = document.querySelector('.emote-buttons-grid');
+    if (emoteGrid) {
+      const existingBtn = Array.from(emoteGrid.querySelectorAll('.btn-emote'))
+                               .find(btn => btn.getAttribute('data-emote') === emote);
+      
+      if (!existingBtn) {
+        // Remove the last button
+        const btns = emoteGrid.querySelectorAll('.btn-emote');
+        if (btns.length > 0) {
+          btns[btns.length - 1].remove();
+        }
+
+        // Create new button and insert at the beginning
+        const newBtn = document.createElement('button');
+        newBtn.className = 'btn-emote';
+        newBtn.setAttribute('data-emote', emote);
+        newBtn.innerText = emote;
+        newBtn.addEventListener('click', () => {
+          if (currentRoomId) socket.emit('send-emote', { roomId: currentRoomId, emote });
+        });
+        
+        emoteGrid.insertBefore(newBtn, emoteGrid.firstChild);
+      }
+    }
   }
 }
