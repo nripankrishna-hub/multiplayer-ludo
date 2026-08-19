@@ -1360,16 +1360,23 @@ function switchStickerTab(cat) {
   const tabs = document.querySelectorAll('.sticker-category-tabs .tab-btn');
   tabs.forEach(t => t.classList.remove('active'));
 
-  const activeTabBtn = Array.from(tabs).find(t => t.getAttribute('onclick')?.includes(cat));
+  const activeTabBtn = Array.from(tabs).find(t => t.getAttribute('data-tab') === cat);
   if (activeTabBtn) activeTabBtn.classList.add('active');
 
   const grid = document.getElementById('stickerGrid');
   if (!grid) return;
 
   const stickers = STICKER_CATEGORIES[cat] || STICKER_CATEGORIES.funny;
-  grid.innerHTML = stickers.map(s => `
-    <div class="sticker-item" onclick="sendSticker('${s}')">${s}</div>
-  `).join('');
+  
+  // CSP Compliance: Build DOM elements and attach listeners directly instead of innerHTML + onclick
+  grid.innerHTML = '';
+  stickers.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'sticker-item';
+    item.textContent = s;
+    item.addEventListener('click', () => sendSticker(s));
+    grid.appendChild(item);
+  });
 }
 
 window.targetedReceiverColor = null;
