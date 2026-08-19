@@ -216,7 +216,7 @@
             <div class="emote-bar">
               <div class="emote-header">
                 <span class="emote-label">Reactions:</span>
-                <button type="button" class="btn-more-emotes" id="btnMoreEmotes" onclick="toggleStickerDrawer(true)">➕ More</button>
+                <button type="button" class="btn-more-emotes" id="btnMoreEmotes">➕ More</button>
               </div>
               <div class="emote-buttons-grid">
                 <button class="btn-emote" data-emote="👍">👍</button>
@@ -235,8 +235,8 @@
             <!-- Real-Time Chat Section -->
             <div class="sidebar-section chat-section">
               <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h3>💬 Live LAN Chat</h3>
-                <button type="button" class="btn btn-secondary btn-sm" onclick="clearChatMessages()" title="Clear Chat">🧹</button>
+                <h3>💬 Live Chat</h3>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnClearChat" title="Clear Chat">🧹</button>
               </div>
               <div class="chat-messages-box" id="chatMessages">
                 <div class="chat-system-msg">System: Welcome to LAN Ludo chat!</div>
@@ -262,16 +262,15 @@
     <div id="stickerDrawerModal" class="sticker-drawer-overlay" style="display: none;">
       <div class="sticker-drawer-card glassmorphism">
         <div class="sticker-drawer-header">
-          <h3>🎭 Funny Stickers & Emoticons</h3>
-          <button class="btn-close-drawer" onclick="toggleStickerDrawer(false)">✕</button>
+          <h3>Send a Sticker</h3>
+          <button class="btn-close-drawer" id="btnCloseStickerDrawer">✕</button>
         </div>
-        
         <div class="sticker-category-tabs">
-          <button class="tab-btn active" onclick="switchStickerTab('funny')">🤡 Pranks</button>
-          <button class="tab-btn" onclick="switchStickerTab('laugh')">😂 Laugh</button>
-          <button class="tab-btn" onclick="switchStickerTab('rage')">🤬 Taunts</button>
-          <button class="tab-btn" onclick="switchStickerTab('luck')">🍀 Luck</button>
-          <button class="tab-btn" onclick="switchStickerTab('gifts')">🎁 Gifts</button>
+          <button class="tab-btn active" data-tab="funny">🤡 Pranks</button>
+          <button class="tab-btn" data-tab="laugh">😂 Laugh</button>
+          <button class="tab-btn" data-tab="rage">🤬 Taunts</button>
+          <button class="tab-btn" data-tab="luck">🍀 Luck</button>
+          <button class="tab-btn" data-tab="gifts">🎁 Gifts</button>
         </div>
 
         <div class="sticker-grid" id="stickerGrid">
@@ -335,11 +334,11 @@
           </table>
         </div>
 
-        <div class="victory-actions" style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
-          <button class="btn btn-primary glow-button" onclick="closeVictoryModal()">
+        <div class="modal-buttons" style="display: flex; gap: 15px; margin-top: 20px;">
+          <button id="btnCloseVictory" class="btn btn-primary glow-button">
             🎮 Close & View Board
           </button>
-          <button id="btnEndDeleteRoom" class="btn btn-danger glow-button" style="display: none;" onclick="handleDeleteRoom(currentRoomId)">
+          <button id="btnEndDeleteRoom" class="btn btn-danger glow-button" style="display: none;">
             🗑️ Delete Room & Exit
           </button>
         </div>

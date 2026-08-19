@@ -454,6 +454,35 @@ function setupEventListeners() {
       copyTextToClipboard(currentRoomId, btnCopyRoomCode);
     });
   }
+
+  // CSP Compliance: Attach UI event listeners instead of inline onclick
+  const btnMoreEmotes = document.getElementById('btnMoreEmotes');
+  if (btnMoreEmotes) btnMoreEmotes.addEventListener('click', () => toggleStickerDrawer(true));
+
+  const btnClearChat = document.getElementById('btnClearChat');
+  if (btnClearChat) btnClearChat.addEventListener('click', clearChatMessages);
+
+  const btnCloseStickerDrawer = document.getElementById('btnCloseStickerDrawer');
+  if (btnCloseStickerDrawer) btnCloseStickerDrawer.addEventListener('click', () => toggleStickerDrawer(false));
+
+  const tabBtns = document.querySelectorAll('.tab-btn[data-tab]');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.tab) switchStickerTab(btn.dataset.tab);
+    });
+  });
+
+  const btnCloseVictory = document.getElementById('btnCloseVictory');
+  if (btnCloseVictory) btnCloseVictory.addEventListener('click', closeVictoryModal);
+
+  const btnEndDeleteRoom = document.getElementById('btnEndDeleteRoom');
+  if (btnEndDeleteRoom) {
+    btnEndDeleteRoom.addEventListener('click', () => {
+      if (typeof handleDeleteRoom === 'function') {
+        handleDeleteRoom(currentRoomId);
+      }
+    });
+  }
 }
 
 // Copy Text Helper (Supports Clipboard API with document.execCommand fallback)
