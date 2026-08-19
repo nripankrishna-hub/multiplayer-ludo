@@ -15,11 +15,27 @@ class WebRTCVoiceManager {
     this.audioContainer = document.getElementById('audioPeersContainer');
     this.isMuted = false;
 
-    // Use Google's public STUN servers for NAT traversal
+    // Use Google's public STUN servers for standard NAT traversal
+    // Use OpenRelay TURN servers for strict firewalls/Symmetric NAT (Cellular Data)
     this.iceServers = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+          urls: 'turn:openrelay.metered.ca:80',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        },
+        {
+          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
       ]
     };
 
@@ -199,7 +215,11 @@ class WebRTCVoiceManager {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      if (pc.connectionState === 'failed') {
+        console.error('WebRTC Connection Failed. Symmetric NAT / Strict Firewall detected.');
+        alert('Voice chat connection failed. Your mobile carrier or Wi-Fi firewall may be blocking direct P2P connections (Symmetric NAT).');
+        this.removePeer(targetSocketId);
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
         this.removePeer(targetSocketId);
       }
     };
@@ -219,9 +239,15 @@ class WebRTCVoiceManager {
       audioElement = document.createElement('audio');
       audioElement.id = `audio-peer-${socketId}`;
       audioElement.autoplay = true;
+      audioElement.playsInline = true; // Required for iOS Safari WebRTC playback
       this.audioContainer.appendChild(audioElement);
     }
     audioElement.srcObject = stream;
+    
+    // Explicitly call play to handle Safari autoplay restrictions
+    audioElement.play().catch(err => {
+      console.warn("Autoplay prevented for remote audio stream:", err);
+    });
   }
 
   removeAudioElement(socketId) {
