@@ -83,6 +83,12 @@ class WebRTCVoiceManager {
     
     // Request microphone access
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+           alert('Voice chat requires a secure HTTPS connection on mobile devices. (Browser security policy).');
+        }
+        throw new Error('WebRTC not supported or requires HTTPS');
+      }
       this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       
       if (this.btnMicToggle) {
@@ -97,7 +103,11 @@ class WebRTCVoiceManager {
     } catch (err) {
       console.error('🎤 Microphone access denied or not available:', err);
       if (this.btnMicToggle) {
-        this.btnMicToggle.style.display = 'none';
+        // Do not hide the button; allow the user to tap it to retry (solves iOS Safari user-gesture requirement)
+        this.btnMicToggle.style.display = 'inline-flex';
+        this.btnMicToggle.className = 'btn-icon mic-muted';
+        this.btnMicToggle.innerText = '❌';
+        this.btnMicToggle.title = 'Tap to Connect Voice';
       }
     }
   }
@@ -128,7 +138,13 @@ class WebRTCVoiceManager {
   }
 
   toggleMic() {
-    if (!this.localStream) return;
+    if (!this.localStream) {
+      // If we don't have a stream (e.g., it failed initially due to missing user gesture on mobile), try joining again!
+      if (this.roomId) {
+        this.joinRoom(this.roomId);
+      }
+      return;
+    }
     
     this.isMuted = !this.isMuted;
     this.localStream.getAudioTracks().forEach(track => {

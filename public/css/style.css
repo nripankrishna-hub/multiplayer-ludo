@@ -1279,10 +1279,17 @@ body {
   box-sizing: border-box;
 }
 
-.emote-buttons-grid .btn-emote:hover {
-  transform: scale(1.2) rotate(4deg);
-  background: rgba(56, 189, 248, 0.25);
-  border-color: rgba(56, 189, 248, 0.4);
+@media (hover: hover) and (pointer: fine) {
+  .emote-buttons-grid .btn-emote:hover {
+    transform: scale(1.2) rotate(4deg);
+    background: rgba(56, 189, 248, 0.25);
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+}
+
+.emote-buttons-grid .btn-emote:active {
+  transform: scale(0.9);
+  background: rgba(56, 189, 248, 0.4);
 }
 
 .sticker-drawer-overlay {
