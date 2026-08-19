@@ -1386,3 +1386,15 @@ function sendSticker(emote) {
     }
   }
 }
+
+// Clear Live Chat
+window.clearChatMessages = function() {
+  const chatMessages = document.getElementById('chatMessages');
+  if (chatMessages) {
+    chatMessages.innerHTML = '';
+    const sysMsg = document.createElement('div');
+    sysMsg.className = 'chat-system-msg';
+    sysMsg.textContent = 'System: Chat cleared.';
+    chatMessages.appendChild(sysMsg);
+  }
+};
