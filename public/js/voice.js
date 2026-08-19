@@ -94,7 +94,7 @@ class WebRTCVoiceManager {
     });
   }
 
-  async joinRoom(roomId) {
+  async joinRoom(roomId, isManualTap = false) {
     this.roomId = roomId;
     
     // Request microphone access
@@ -118,11 +118,14 @@ class WebRTCVoiceManager {
 
     } catch (err) {
       console.error('🎤 Microphone access denied or not available:', err);
+      if (isManualTap) {
+        alert('Microphone access denied! Please check your browser permissions or ensure you are on a secure HTTPS connection.');
+      }
       if (this.btnMicToggle) {
         // Do not hide the button; allow the user to tap it to retry (solves iOS Safari user-gesture requirement)
         this.btnMicToggle.style.display = 'inline-flex';
         this.btnMicToggle.className = 'btn-icon mic-muted';
-        this.btnMicToggle.innerText = '❌';
+        this.btnMicToggle.innerText = '🎙️'; // Changed from ❌ to look like an action
         this.btnMicToggle.title = 'Tap to Connect Voice';
       }
     }
@@ -157,7 +160,7 @@ class WebRTCVoiceManager {
     if (!this.localStream) {
       // If we don't have a stream (e.g., it failed initially due to missing user gesture on mobile), try joining again!
       if (this.roomId) {
-        this.joinRoom(this.roomId);
+        this.joinRoom(this.roomId, true);
       }
       return;
     }
