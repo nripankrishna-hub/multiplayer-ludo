@@ -18,7 +18,7 @@ try {
     contentSecurityPolicy: {
       directives: {
         defaultSrc:  ["'self'"],
-        scriptSrc:   ["'self'", "https://cdn.jsdelivr.net"],
+        scriptSrc:   ["'self'", "https://cdn.jsdelivr.net", "https://webrtc.github.io"],
         styleSrc:    ["'self'", "https://fonts.googleapis.com", "'unsafe-inline'"],
         fontSrc:     ["'self'", "https://fonts.gstatic.com"],
         connectSrc:  ["'self'", "ws:", "wss:"],

@@ -119,7 +119,7 @@ class WebRTCVoiceManager {
     } catch (err) {
       console.error('🎤 Microphone access denied or not available:', err);
       if (isManualTap) {
-        alert('Microphone access denied! Please check your browser permissions or ensure you are on a secure HTTPS connection.');
+        alert(`Microphone access failed!\nReason: ${err.name} - ${err.message}\n\nPlease check your browser Site Settings and ensure the microphone is Allowed.`);
       }
       if (this.btnMicToggle) {
         // Do not hide the button; allow the user to tap it to retry (solves iOS Safari user-gesture requirement)
